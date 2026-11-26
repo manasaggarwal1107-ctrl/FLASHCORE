@@ -1,3 +1,8 @@
+"""LEGACY / UNMOUNTED ORM MODELS for unused `database/schema.sql`.
+
+Retained for reference only; excluded from Alembic `target_metadata` and active routes.
+"""
+
 from sqlalchemy import (
     BigInteger, String, Text, Boolean, Integer,
     Numeric, ForeignKey, CheckConstraint, UniqueConstraint,

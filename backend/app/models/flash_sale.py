@@ -1,4 +1,10 @@
 
+"""LEGACY / UNMOUNTED ORM MODELS for unused `database/schema.sql`.
+
+Retained for reference only; excluded from Alembic `target_metadata` and active routes.
+Active simulation flash-sale models live in `app/models/simulation.py`.
+"""
+
 from sqlalchemy import (
     BigInteger, String, Text, Integer, Numeric,
     ForeignKey, CheckConstraint, UniqueConstraint,
