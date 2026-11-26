@@ -120,6 +120,8 @@ describe('endpoint registry', () => {
       { endpoint: endpoints.overview.inventoryAllocation, method: 'GET', path: '/simulations/analytics/inventory-allocation' },
       { endpoint: endpoints.overview.flashSalePerformance, method: 'GET', path: '/simulations/analytics/flash-sales-overview' },
       { endpoint: endpoints.overview.activity, method: 'GET', path: '/simulations/analytics/activity' },
+      { endpoint: endpoints.organisations.list, method: 'GET', path: '/organisations' },
+      { endpoint: endpoints.organisations.create, method: 'POST', path: '/organisations' },
       { endpoint: endpoints.concurrency.strategies, method: 'GET', path: '/simulations/strategies' },
       { endpoint: endpoints.imports.list, method: 'GET', path: '/imports' },
       { endpoint: endpoints.imports.get, method: 'GET', path: '/imports/:id' },

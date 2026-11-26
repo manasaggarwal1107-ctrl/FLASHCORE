@@ -1,9 +1,16 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { useOptionalAuth } from '@/hooks/useAuth';
+import { getActiveOrganisationId } from '@/services/api/auth';
 import { apiRequest } from '@/services/api/client';
 import { isEndpointLive, resolvePath } from '@/services/api/endpoints';
 import type { EndpointSpec } from '@/services/api/endpoints';
 import { adaptPage, toQuery } from '@/services/api/pagination';
 import type { ListParams, Page } from '@/services/api/pagination';
+
+function useOrgScopeKey(): number | null {
+  const auth = useOptionalAuth();
+  return auth?.activeOrganisation?.organisationId ?? getActiveOrganisationId() ?? null;
+}
 
 /**
  * Generic paginated GET. When the endpoint is still `pending-contract` the query is disabled and
@@ -11,8 +18,9 @@ import type { ListParams, Page } from '@/services/api/pagination';
  */
 export function useResourceList<T>(spec: EndpointSpec, params: ListParams, pathParams?: Record<string, string | number>) {
   const live = isEndpointLive(spec);
+  const orgId = useOrgScopeKey();
   const query = useQuery<Page<T>>({
-    queryKey: [spec.id, pathParams ?? null, params],
+    queryKey: [spec.id, orgId, pathParams ?? null, params],
     enabled: live,
     placeholderData: keepPreviousData,
     queryFn: async ({ signal }) => {
@@ -27,8 +35,9 @@ export function useResourceList<T>(spec: EndpointSpec, params: ListParams, pathP
 /** Generic single-resource GET with the same pending-contract behaviour. */
 export function useResource<T>(spec: EndpointSpec, pathParams: Record<string, string | number> = {}, queryParams?: Record<string, string>) {
   const live = isEndpointLive(spec);
+  const orgId = useOrgScopeKey();
   const query = useQuery<T>({
-    queryKey: [spec.id, pathParams, queryParams ?? null],
+    queryKey: [spec.id, orgId, pathParams, queryParams ?? null],
     enabled: live,
     queryFn: ({ signal }) => {
       if (!isEndpointLive(spec)) throw new Error(`Endpoint ${spec.id} is not confirmed`);

@@ -6,6 +6,8 @@ import { Plus, Search } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Panel, PanelBody } from '@/components/ui/Panel';
+import { useOptionalAuth } from '@/hooks/useAuth';
+import { getActiveOrganisationId } from '@/services/api/auth';
 import { apiRequest } from '@/services/api/client';
 import { endpoints } from '@/services/api/endpoints';
 
@@ -21,8 +23,10 @@ export function ProductsPage() {
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
 
+  const auth = useOptionalAuth();
+  const orgId = auth?.activeOrganisation?.organisationId ?? getActiveOrganisationId() ?? null;
   const query = useQuery({
-    queryKey: [endpoints.products.list.id],
+    queryKey: [endpoints.products.list.id, orgId],
     queryFn: () => apiRequest<SimulationProduct[]>('/simulations/products'),
   });
 

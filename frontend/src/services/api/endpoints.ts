@@ -72,6 +72,22 @@ export const endpoints = {
       status: 'confirmed',
     },
   },
+  organisations: {
+    list: {
+      id: 'organisations.list',
+      label: 'List user organisations',
+      method: 'GET',
+      path: '/organisations',
+      status: 'confirmed',
+    },
+    create: {
+      id: 'organisations.create',
+      label: 'Create organisation',
+      method: 'POST',
+      path: '/organisations',
+      status: 'confirmed',
+    },
+  },
   overview: {
     summary: {
       id: 'overview.summary',

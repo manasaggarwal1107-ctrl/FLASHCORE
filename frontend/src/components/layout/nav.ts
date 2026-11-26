@@ -37,13 +37,38 @@ export const navGroups: NavGroup[] = [
         label: 'Overview',
         path: '/overview',
         icon: LayoutDashboard,
-        roles: ['admin', 'analyst'],
+        roles: ['owner', 'admin', 'analyst'],
       },
-      { label: 'Products', path: '/products', icon: Package },
-      { label: 'Inventory', path: '/inventory', icon: Boxes },
-      { label: 'Flash Sales', path: '/flash-sales', icon: Zap },
-      { label: 'Orders', path: '/orders', icon: ShoppingCart },
-      { label: 'Customers', path: '/customers', icon: Users },
+      {
+        label: 'Products',
+        path: '/products',
+        icon: Package,
+        roles: ['owner', 'admin', 'analyst', 'operator'],
+      },
+      {
+        label: 'Inventory',
+        path: '/inventory',
+        icon: Boxes,
+        roles: ['owner', 'admin', 'analyst', 'operator'],
+      },
+      {
+        label: 'Flash Sales',
+        path: '/flash-sales',
+        icon: Zap,
+        roles: ['owner', 'admin', 'analyst', 'operator'],
+      },
+      {
+        label: 'Orders',
+        path: '/orders',
+        icon: ShoppingCart,
+        roles: ['owner', 'admin', 'analyst', 'operator'],
+      },
+      {
+        label: 'Customers',
+        path: '/customers',
+        icon: Users,
+        roles: ['owner', 'admin', 'analyst', 'operator'],
+      },
     ],
   },
   {
@@ -53,19 +78,21 @@ export const navGroups: NavGroup[] = [
         label: 'Analytics',
         path: '/analytics',
         icon: BarChart3,
-        roles: ['admin', 'analyst'],
+        roles: ['owner', 'admin', 'analyst'],
       },
       {
         label: 'Transaction Monitor',
         path: '/transactions',
         icon: Activity,
         keywords: ['purchase', 'attempts'],
+        roles: ['owner', 'admin', 'analyst', 'operator'],
       },
       {
         label: 'Concurrency Lab',
         path: '/concurrency',
         icon: FlaskConical,
         keywords: ['simulation', 'load'],
+        roles: ['owner', 'admin', 'analyst', 'operator'],
       },
     ],
   },
@@ -77,19 +104,26 @@ export const navGroups: NavGroup[] = [
         path: '/imports',
         icon: Upload,
         keywords: ['csv', 'upload'],
+        roles: ['owner', 'admin', 'analyst'],
       },
-      { label: 'Audit Logs', path: '/audit', icon: FileClock },
+      {
+        label: 'Audit Logs',
+        path: '/audit',
+        icon: FileClock,
+        roles: ['owner', 'admin'],
+      },
       {
         label: 'System Health',
         path: '/system',
         icon: HeartPulse,
         keywords: ['status'],
+        roles: ['owner', 'admin', 'analyst', 'operator'],
       },
       {
         label: 'Settings',
         path: '/settings',
         icon: Settings,
-        roles: ['admin', 'analyst', 'operator'],
+        roles: ['owner', 'admin', 'analyst', 'operator'],
       },
     ],
   },
@@ -97,11 +131,6 @@ export const navGroups: NavGroup[] = [
 
 export const allNavItems: NavItem[] = navGroups.flatMap((g) => g.items);
 
-/**
- * Returns only navigation entries with a confirmed role mapping.
- * Entries without role metadata remain in the full registry but are
- * excluded until their backend permissions are verified.
- */
 export function getNavGroupsForRole(role: UserRole): NavGroup[] {
   return navGroups
     .map((group) => ({

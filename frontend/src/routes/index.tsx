@@ -49,13 +49,6 @@ export const router = createBrowserRouter([
     ),
   },
   {
-    path: '/token-access',
-    element: page(
-      () => import('@/features/settings/SettingsPage'),
-      'SettingsPage',
-    ),
-  },
-  {
     path: '/',
     element: (
       <RequireAuth>
@@ -68,7 +61,7 @@ export const router = createBrowserRouter([
       {
         path: 'overview',
         element: (
-          <RequireRole allowedRoles={['admin', 'analyst']}>
+          <RequireRole allowedRoles={['owner', 'admin', 'analyst']}>
             {page(
               () => import('@/features/overview/OverviewPage'),
               'OverviewPage',
@@ -86,9 +79,13 @@ export const router = createBrowserRouter([
       },
       {
         path: 'products/new',
-        element: page(
-          () => import('@/features/products/ProductFormPage'),
-          'ProductFormPage',
+        element: (
+          <RequireRole allowedRoles={['owner', 'admin', 'operator']}>
+            {page(
+              () => import('@/features/products/ProductFormPage'),
+              'ProductFormPage',
+            )}
+          </RequireRole>
         ),
       },
       {
@@ -100,9 +97,13 @@ export const router = createBrowserRouter([
       },
       {
         path: 'products/:id/edit',
-        element: page(
-          () => import('@/features/products/ProductFormPage'),
-          'ProductFormPage',
+        element: (
+          <RequireRole allowedRoles={['owner', 'admin', 'operator']}>
+            {page(
+              () => import('@/features/products/ProductFormPage'),
+              'ProductFormPage',
+            )}
+          </RequireRole>
         ),
       },
 
@@ -123,9 +124,13 @@ export const router = createBrowserRouter([
       },
       {
         path: 'flash-sales/new',
-        element: page(
-          () => import('@/features/flash-sales/FlashSaleFormPage'),
-          'FlashSaleFormPage',
+        element: (
+          <RequireRole allowedRoles={['owner', 'admin', 'operator']}>
+            {page(
+              () => import('@/features/flash-sales/FlashSaleFormPage'),
+              'FlashSaleFormPage',
+            )}
+          </RequireRole>
         ),
       },
       {
@@ -137,9 +142,13 @@ export const router = createBrowserRouter([
       },
       {
         path: 'flash-sales/:id/edit',
-        element: page(
-          () => import('@/features/flash-sales/FlashSaleFormPage'),
-          'FlashSaleFormPage',
+        element: (
+          <RequireRole allowedRoles={['owner', 'admin', 'operator']}>
+            {page(
+              () => import('@/features/flash-sales/FlashSaleFormPage'),
+              'FlashSaleFormPage',
+            )}
+          </RequireRole>
         ),
       },
 
@@ -176,7 +185,7 @@ export const router = createBrowserRouter([
       {
         path: 'analytics',
         element: (
-          <RequireRole allowedRoles={['admin', 'analyst']}>
+          <RequireRole allowedRoles={['owner', 'admin', 'analyst']}>
             {page(
               () => import('@/features/analytics/AnalyticsPage'),
               'AnalyticsPage',
@@ -210,24 +219,36 @@ export const router = createBrowserRouter([
 
       {
         path: 'imports',
-        element: page(
-          () => import('@/features/imports/ImportsPage'),
-          'ImportsPage',
+        element: (
+          <RequireRole allowedRoles={['owner', 'admin', 'analyst']}>
+            {page(
+              () => import('@/features/imports/ImportsPage'),
+              'ImportsPage',
+            )}
+          </RequireRole>
         ),
       },
       {
         path: 'imports/:id',
-        element: page(
-          () => import('@/features/imports/ImportDetailPage'),
-          'ImportDetailPage',
+        element: (
+          <RequireRole allowedRoles={['owner', 'admin', 'analyst']}>
+            {page(
+              () => import('@/features/imports/ImportDetailPage'),
+              'ImportDetailPage',
+            )}
+          </RequireRole>
         ),
       },
 
       {
         path: 'audit',
-        element: page(
-          () => import('@/features/audit/AuditPage'),
-          'AuditPage',
+        element: (
+          <RequireRole allowedRoles={['owner', 'admin']}>
+            {page(
+              () => import('@/features/audit/AuditPage'),
+              'AuditPage',
+            )}
+          </RequireRole>
         ),
       },
       {
@@ -244,6 +265,10 @@ export const router = createBrowserRouter([
           'SettingsPage',
         ),
       },
+      {
+        path: 'token-access',
+        element: <Navigate to="/settings" replace />,
+      },
 
       {
         path: '*',
@@ -255,4 +280,3 @@ export const router = createBrowserRouter([
     ],
   },
 ]);
-

@@ -32,16 +32,21 @@ describe('navigation model', () => {
     ]);
   });
 
-  it('shows all unrestricted sections to analysts while retaining explicit role restrictions', () => {
+  it('shows role-appropriate sections aligned with backend RBAC', () => {
+    const ownerItems = getNavGroupsForRole('owner').flatMap((g) => g.items);
     const analystItems = getNavGroupsForRole('analyst').flatMap((g) => g.items);
     const operatorItems = getNavGroupsForRole('operator').flatMap((g) => g.items);
     const adminItems = getNavGroupsForRole('admin').flatMap((g) => g.items);
 
-    expect(analystItems.map((i) => i.label)).toEqual(allNavItems.map((i) => i.label));
+    expect(ownerItems.map((i) => i.label)).toEqual(allNavItems.map((i) => i.label));
     expect(adminItems).toHaveLength(13);
-    expect(operatorItems).toHaveLength(11);
+    expect(analystItems).toHaveLength(12);
+    expect(analystItems.some((i) => i.label === 'Audit Logs')).toBe(false);
+    expect(operatorItems).toHaveLength(9);
     expect(operatorItems.some((i) => i.label === 'Overview')).toBe(false);
     expect(operatorItems.some((i) => i.label === 'Analytics')).toBe(false);
+    expect(operatorItems.some((i) => i.label === 'Data Imports')).toBe(false);
+    expect(operatorItems.some((i) => i.label === 'Audit Logs')).toBe(false);
   });
   it('filters by label and keyword', () => {
     expect(filterNavItems('flash').map((i) => i.label)).toEqual(['Flash Sales']);

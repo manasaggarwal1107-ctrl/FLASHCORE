@@ -1,8 +1,18 @@
 ﻿import { apiRequest } from './client';
 import { endpoints, isEndpointLive, resolvePath } from './endpoints';
 
-export type UserRole = 'admin' | 'analyst' | 'operator';
+export type OrgRole = 'owner' | 'admin' | 'analyst' | 'operator';
+export type UserRole = OrgRole;
 export type UserStatus = 'active' | 'disabled';
+
+export interface UserOrganisation {
+  organisationId: number;
+  organisationName: string;
+  organisationSlug: string;
+  organisationStatus: string;
+  role: OrgRole;
+  membershipStatus: string;
+}
 
 export interface AuthUser {
   id: number;
@@ -10,6 +20,9 @@ export interface AuthUser {
   role: UserRole;
   status: UserStatus;
   createdAt: string;
+  activeOrganisationId?: number | null;
+  activeOrganisationRole?: OrgRole | null;
+  organisations?: UserOrganisation[];
 }
 
 export interface AuthResponse {

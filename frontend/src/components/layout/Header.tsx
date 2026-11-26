@@ -1,6 +1,8 @@
-﻿import { Link, useNavigate } from 'react-router-dom';
+﻿import { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   Bell,
+  Building2,
   KeyRound,
   LogOut,
   Menu,
@@ -31,8 +33,12 @@ export function Header({
   const auth = useOptionalAuth();
   const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
+  const [switchingOrg, setSwitchingOrg] = useState(false);
 
   const user = auth?.user;
+  const organisations = auth?.organisations ?? [];
+  const activeOrg = auth?.activeOrganisation;
+  const activeRole = auth?.activeRole ?? user?.role;
 
   return (
     <header className="flex h-14 shrink-0 items-center gap-3 border-b border-line bg-canvas px-3 sm:px-5">
@@ -48,6 +54,38 @@ export function Header({
       <Breadcrumbs />
 
       <div className="ml-auto flex items-center gap-2">
+        {activeOrg && (
+          <div className="hidden items-center gap-1.5 rounded border border-line-strong bg-surface px-2 py-1 text-xs text-ink sm:flex">
+            <Building2 className="h-3.5 w-3.5 text-ink-muted" aria-hidden />
+            {organisations.length > 1 && auth ? (
+              <select
+                aria-label="Active organisation"
+                disabled={switchingOrg}
+                value={activeOrg.organisationId}
+                onChange={(event) => {
+                  const nextId = Number(event.target.value);
+                  if (!Number.isInteger(nextId) || nextId === activeOrg.organisationId) return;
+                  setSwitchingOrg(true);
+                  void auth.switchOrganisation(nextId).finally(() => {
+                    setSwitchingOrg(false);
+                  });
+                }}
+                className="bg-transparent text-xs font-medium text-ink focus:outline-none"
+              >
+                {organisations.map((org) => (
+                  <option key={org.organisationId} value={org.organisationId}>
+                    {org.organisationName} ({org.role})
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <span className="max-w-[160px] truncate font-medium">
+                {activeOrg.organisationName}
+              </span>
+            )}
+          </div>
+        )}
+
         <button
           type="button"
           onClick={onOpenSearch}
@@ -131,7 +169,7 @@ export function Header({
                       {user.email}
                     </div>
                     <div className="mt-1 text-xs capitalize text-ink-muted">
-                      {user.role} account
+                      {activeRole} role{activeOrg ? ` · ${activeOrg.organisationName}` : ''}
                     </div>
                     <div className="mt-1 text-2xs text-ink-faint">
                       Account status: {user.status}
@@ -187,4 +225,3 @@ export function Header({
     </header>
   );
 }
-

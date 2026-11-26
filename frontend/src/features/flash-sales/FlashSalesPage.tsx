@@ -5,6 +5,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/Button';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Panel, PanelBody } from '@/components/ui/Panel';
+import { useOptionalAuth } from '@/hooks/useAuth';
+import { getActiveOrganisationId } from '@/services/api/auth';
 import { apiRequest } from '@/services/api/client';
 import { endpoints, resolvePath } from '@/services/api/endpoints';
 
@@ -67,18 +69,21 @@ export function FlashSalesPage() {
   const [salePrice, setSalePrice] = useState('');
   const [stockLimit, setStockLimit] = useState('');
 
+  const auth = useOptionalAuth();
+  const orgId = auth?.activeOrganisation?.organisationId ?? getActiveOrganisationId() ?? null;
+
   const runsQuery = useQuery({
-    queryKey: [endpoints.concurrency.runs.id],
+    queryKey: [endpoints.concurrency.runs.id, orgId],
     queryFn: () => apiRequest<SimulationRun[]>('/simulations/runs'),
   });
 
   const inventoryQuery = useQuery({
-    queryKey: [endpoints.inventory.list.id],
+    queryKey: [endpoints.inventory.list.id, orgId],
     queryFn: () => apiRequest<InventoryRecord[]>('/simulations/inventory'),
   });
 
   const summaryQuery = useQuery({
-    queryKey: [endpoints.concurrency.run.id, selectedRunId],
+    queryKey: [endpoints.concurrency.run.id, orgId, selectedRunId],
     enabled: Boolean(selectedRunId),
     queryFn: () =>
       apiRequest<RunSummary>(

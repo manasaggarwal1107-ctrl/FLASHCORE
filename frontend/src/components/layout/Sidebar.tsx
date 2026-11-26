@@ -15,8 +15,9 @@ export function SidebarNav({
 }) {
   const auth = useOptionalAuth();
 
-  const visibleGroups = auth?.user
-    ? getNavGroupsForRole(auth.user.role)
+  const effectiveRole = auth?.activeRole ?? auth?.user?.role;
+  const visibleGroups = effectiveRole
+    ? getNavGroupsForRole(effectiveRole)
     : navGroups;
 
   return (

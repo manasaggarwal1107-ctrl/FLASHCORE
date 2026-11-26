@@ -1,6 +1,6 @@
 import { camelizeKeys } from '@/lib/case';
 import { config } from '@/lib/config';
-import { getAuthHeaders } from './auth';
+import { getActiveOrganisationId, getAuthHeaders } from './auth';
 import { reportResponseReceived, reportUnreachable } from './connectivity';
 import { ApiError, kindFromStatus, messageFromBody } from './errors';
 
@@ -61,7 +61,13 @@ async function readBody(res: Response): Promise<unknown> {
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { method = 'GET', query, body, headers = {}, signal, timeoutMs = config.apiTimeoutMs, idempotencyKey, rawKeys } = options;
 
-  const finalHeaders: Record<string, string> = { Accept: 'application/json', ...getAuthHeaders(), ...headers };
+  const activeOrgId = getActiveOrganisationId();
+  const finalHeaders: Record<string, string> = {
+    Accept: 'application/json',
+    ...getAuthHeaders(),
+    ...(activeOrgId !== null ? { 'X-Organisation-Id': String(activeOrgId) } : {}),
+    ...headers,
+  };
   let payload: BodyInit | undefined;
   if (body instanceof FormData) {
     payload = body; // browser sets the multipart boundary

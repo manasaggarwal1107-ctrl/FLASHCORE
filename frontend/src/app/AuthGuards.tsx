@@ -19,7 +19,7 @@ function AuthLoading() {
 }
 
 export function RequireAuth({ children }: { children: ReactNode }) {
-  const { status, error, retrySession } = useAuth();
+  const { status, error, membershipError, retrySession, logout } = useAuth();
 
   if (status === 'loading') return <AuthLoading />;
 
@@ -53,6 +53,28 @@ export function RequireAuth({ children }: { children: ReactNode }) {
     );
   }
 
+  if (membershipError) {
+    return (
+      <main className="flex min-h-full items-center justify-center bg-canvas px-4">
+        <section className="panel w-full max-w-md p-6">
+          <p className="eyebrow mb-2">Organisation access unavailable</p>
+          <h1 className="text-lg font-semibold text-ink">
+            No active organisation membership
+          </h1>
+          <p className="mt-2 text-sm text-ink-muted">{membershipError}</p>
+          <div className="mt-5 flex flex-wrap gap-2">
+            <Button variant="primary" onClick={retrySession}>
+              Refresh memberships
+            </Button>
+            <Button variant="secondary" onClick={() => void logout()}>
+              Sign out
+            </Button>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
   return children;
 }
 
@@ -75,7 +97,7 @@ export function RequireRole({
   allowedRoles: UserRole[];
   children: ReactNode;
 }) {
-  const { status, user } = useAuth();
+  const { status, user, activeRole } = useAuth();
 
   if (status === 'loading') return <AuthLoading />;
 
@@ -83,7 +105,9 @@ export function RequireRole({
     return <Navigate to="/login" replace />;
   }
 
-  if (!allowedRoles.includes(user.role)) {
+  const effectiveRole = activeRole ?? user.role;
+
+  if (!allowedRoles.includes(effectiveRole)) {
     return (
       <main className="flex min-h-full items-center justify-center bg-canvas px-4">
         <section className="panel w-full max-w-md p-6">
@@ -92,7 +116,7 @@ export function RequireRole({
             You don't have permission to view this page.
           </h1>
           <p className="mt-2 text-sm text-ink-muted">
-            Your current role ({user.role}) does not have access to this section.
+            Your current role ({effectiveRole}) does not have access to this section.
             Contact an administrator if you believe this is incorrect.
           </p>
           <div className="mt-5">

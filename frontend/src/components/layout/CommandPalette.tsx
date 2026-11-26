@@ -37,12 +37,13 @@ export function CommandPalette({
   const [index, setIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const effectiveRole = auth?.activeRole ?? auth?.user?.role;
   const availableItems = useMemo(
     () =>
-      auth?.user
-        ? getNavGroupsForRole(auth.user.role).flatMap((group) => group.items)
+      effectiveRole
+        ? getNavGroupsForRole(effectiveRole).flatMap((group) => group.items)
         : allNavItems,
-    [auth?.user?.role],
+    [effectiveRole],
   );
 
   const results = useMemo(
