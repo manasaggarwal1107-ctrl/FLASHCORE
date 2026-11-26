@@ -3,13 +3,14 @@ from sqlalchemy.orm import Session
 
 from app.core.auth_dependencies import OrgContext, require_org_roles
 from app.core.database import get_db
+from app.schemas.payments import PaymentOrderOut
 from app.schemas.retail import (
     OrderCreate,
     OrderListResponse,
     OrderOut,
     OrderTransitionRequest,
 )
-from app.services import order_service
+from app.services import order_service, payment_service
 
 router = APIRouter(prefix="/api/v1/orders", tags=["Commerce Orders"])
 
@@ -66,3 +67,15 @@ def transition_order(
     db: Session = Depends(get_db),
 ):
     return order_service.transition_order(db, org_ctx, order_id, payload)
+
+
+@router.post("/{order_id}/checkout", response_model=PaymentOrderOut, status_code=201)
+def checkout_order(
+    order_id: int,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    org_ctx: OrgContext = Depends(require_org_roles("owner", "admin", "operator")),
+    db: Session = Depends(get_db),
+):
+    return payment_service.create_payment_order_for_checkout(
+        db, org_ctx, order_id, idempotency_key=idempotency_key
+    )

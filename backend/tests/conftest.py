@@ -2,6 +2,10 @@ import os
 
 # Force the isolated test database before importing the application.
 os.environ["DB_NAME"] = "flashcore_test"
+os.environ.setdefault(
+    "FLASHCORE_CREDENTIAL_ENCRYPTION_KEY",
+    "flashcore-test-only-credential-encryption-key-32",
+)
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
