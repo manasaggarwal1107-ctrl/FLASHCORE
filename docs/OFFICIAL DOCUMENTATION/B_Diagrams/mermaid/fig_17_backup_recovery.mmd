@@ -1,0 +1,14 @@
+graph TD
+    PROD[(Neon PostgreSQL Primary)]
+    DUMP[pg_dump Logical Backup Script]
+    WAL[Continuous WAL Archiving]
+    STORAGE[(Encrypted S3 / Cloud Storage)]
+    VERIFY[Automated Restore Drill to Staging]
+    REPORT[Backup Verification Certificate]
+
+    PROD --> DUMP
+    PROD --> WAL
+    DUMP --> STORAGE
+    WAL --> STORAGE
+    STORAGE --> VERIFY
+    VERIFY --> REPORT

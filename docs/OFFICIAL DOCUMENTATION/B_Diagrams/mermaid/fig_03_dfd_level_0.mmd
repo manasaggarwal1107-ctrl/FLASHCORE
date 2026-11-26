@@ -1,0 +1,22 @@
+graph TD
+    CUST((Customer))
+    ADMIN((Administrator))
+    ANALYST((Retail Analyst))
+    ROSS_SRC[Rossmann Historical Dataset]
+
+    FC[[0.0 FLASHCORE Platform Engine]]
+
+    DB[(PostgreSQL Database)]
+
+    CUST -->|Browse, Place Orders, Participate in Flash Sales| FC
+    FC -->|Order Confirmation, Stock Status| CUST
+
+    ADMIN -->|Configure Flash Sales, Stock Adjustments, Run Simulations| FC
+    FC -->|Simulation Metrics, Audit Reports| ADMIN
+
+    ANALYST -->|Query Store Analytics, Sales Trends| FC
+    FC -->|Aggregated KPI Trends, Visual Charts| ANALYST
+
+    ROSS_SRC -->|CSV Raw Data Files| FC
+
+    FC <-->|Read / Write Relational Queries, ACID Transactions| DB

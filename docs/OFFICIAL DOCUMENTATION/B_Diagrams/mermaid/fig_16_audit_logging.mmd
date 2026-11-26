@@ -1,0 +1,11 @@
+graph LR
+    EVT[Administrative or Critical Event]
+    INTERCEPT[Audit Log Interceptor]
+    ENRICH[Enrich Context: UserID, ClientIP, Timestamp, Diff]
+    ASYNC_QUEUE[Async Background Task]
+    AUDIT_TABLE[(PostgreSQL audit_logs Table)]
+
+    EVT --> INTERCEPT
+    INTERCEPT --> ENRICH
+    ENRICH --> ASYNC_QUEUE
+    ASYNC_QUEUE --> AUDIT_TABLE

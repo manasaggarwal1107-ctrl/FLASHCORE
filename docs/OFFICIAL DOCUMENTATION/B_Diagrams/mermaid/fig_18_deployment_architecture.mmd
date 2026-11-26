@@ -1,0 +1,21 @@
+graph LR
+    subgraph Edge [Edge CDN & DNS]
+        USER((User Client))
+        VERCEL[Vercel Global Edge Network - React SPA]
+    end
+
+    subgraph Cloud_App [Render Cloud Services]
+        RENDER[FastAPI ASGI Web Service - Docker / Python 3.13]
+        UVICORN[Uvicorn ASGI Workers]
+    end
+
+    subgraph Cloud_DB [Neon Serverless Cloud]
+        NEON[(PostgreSQL 16 Relational Engine)]
+        STORAGE[Separated Compute & Storage Architecture]
+    end
+
+    USER -->|HTTPS| VERCEL
+    VERCEL -->|API Calls - HTTPS| RENDER
+    RENDER --> UVICORN
+    UVICORN -->|Encrypted SSL Pool - Port 5432| NEON
+    NEON --> STORAGE

@@ -1,0 +1,22 @@
+sequenceDiagram
+    autonumber
+    actor Client
+    participant API as FlashCore API
+    participant Cache as Idempotency Store
+    participant DB as PostgreSQL
+
+    Client->>API: POST /api/simulations/run (Key: UUID-1234)
+    API->>Cache: Lookup Key(UUID-1234)
+    Cache-->>API: Key Not Found
+    API->>Cache: Set Status(UUID-1234, IN_PROGRESS)
+    API->>DB: Execute Transaction
+    DB-->>API: Transaction Committed (OrderID: 9981)
+    API->>Cache: Set Status(UUID-1234, COMMITTED, ResponseData)
+    API-->>Client: Network Timeout / Dropped Packet!
+
+    Note over Client,API: Client Retries Request with Identical Key
+    Client->>API: POST /api/simulations/run (Key: UUID-1234)
+    API->>Cache: Lookup Key(UUID-1234)
+    Cache-->>API: Cached Status=COMMITTED, Data
+    API-->>Client: HTTP 200 OK (Deterministic Replayed Response)
+    Note over DB: No Second DB Execution / Zero Double Decrement

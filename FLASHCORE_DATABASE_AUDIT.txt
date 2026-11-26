@@ -1,0 +1,137 @@
+DATABASE: flashcore_rossmann
+
+TABLES AND ROW COUNTS
+
+[audit_logs] rows=27
+  id | bigint | nullable=NO | default=None
+  actor_type | character varying | nullable=YES | default=None
+  actor_ref | character varying | nullable=YES | default=None
+  action | character varying | nullable=NO | default=None
+  entity_name | character varying | nullable=NO | default=None
+  entity_id | character varying | nullable=YES | default=None
+  details | jsonb | nullable=YES | default=None
+  created_at | timestamp with time zone | nullable=NO | default=now()
+
+[auth_sessions] rows=5
+  jti | uuid | nullable=NO | default=None
+  user_id | bigint | nullable=NO | default=None
+  created_at | timestamp with time zone | nullable=NO | default=now()
+  expires_at | timestamp with time zone | nullable=NO | default=None
+  revoked_at | timestamp with time zone | nullable=YES | default=None
+
+[daily_store_sales] rows=1017209
+  store_id | integer | nullable=NO | default=None
+  sales_date | date | nullable=NO | default=None
+  day_of_week | smallint | nullable=NO | default=None
+  sales | numeric | nullable=NO | default=None
+  customers | integer | nullable=NO | default=None
+  is_open | boolean | nullable=NO | default=None
+  promo | boolean | nullable=NO | default=None
+  state_holiday | character varying | nullable=NO | default='0'::character varying
+  school_holiday | boolean | nullable=NO | default=None
+  import_id | bigint | nullable=NO | default=None
+  source_row_number | integer | nullable=YES | default=None
+
+[dataset_import_errors] rows=0
+  id | bigint | nullable=NO | default=None
+  import_id | bigint | nullable=NO | default=None
+  source_row_number | integer | nullable=YES | default=None
+  raw_record | jsonb | nullable=YES | default=None
+  error_message | text | nullable=NO | default=None
+  created_at | timestamp with time zone | nullable=NO | default=now()
+
+[dataset_imports] rows=2
+  id | bigint | nullable=NO | default=None
+  source_name | character varying | nullable=NO | default=None
+  source_url | text | nullable=YES | default=None
+  source_file | character varying | nullable=NO | default=None
+  source_split | character varying | nullable=NO | default=None
+  checksum_sha256 | character varying | nullable=YES | default=None
+  imported_at | timestamp with time zone | nullable=NO | default=now()
+  total_rows | integer | nullable=NO | default=0
+  successful_rows | integer | nullable=NO | default=0
+  rejected_rows | integer | nullable=NO | default=0
+  status | character varying | nullable=NO | default='pending'::character varying
+
+[flash_sale_products] rows=1
+  id | bigint | nullable=NO | default=None
+  flash_sale_id | bigint | nullable=NO | default=None
+  inventory_id | bigint | nullable=NO | default=None
+  sale_price | numeric | nullable=NO | default=None
+  stock_limit | integer | nullable=NO | default=None
+  sold_quantity | integer | nullable=NO | default=0
+
+[flash_sales] rows=1
+  id | bigint | nullable=NO | default=None
+  simulation_run_id | bigint | nullable=NO | default=None
+  title | character varying | nullable=NO | default=None
+  starts_at | timestamp with time zone | nullable=NO | default=None
+  ends_at | timestamp with time zone | nullable=NO | default=None
+  status | character varying | nullable=NO | default='draft'::character varying
+  created_at | timestamp with time zone | nullable=NO | default=now()
+
+[purchase_attempts] rows=21
+  id | bigint | nullable=NO | default=None
+  simulation_run_id | bigint | nullable=NO | default=None
+  flash_sale_product_id | bigint | nullable=NO | default=None
+  customer_ref | character varying | nullable=NO | default=None
+  idempotency_key | character varying | nullable=NO | default=None
+  quantity | integer | nullable=NO | default=1
+  status | character varying | nullable=NO | default='pending'::character varying
+  failure_reason | text | nullable=YES | default=None
+  created_at | timestamp with time zone | nullable=NO | default=now()
+
+[simulation_inventory] rows=1
+  id | bigint | nullable=NO | default=None
+  store_id | integer | nullable=NO | default=None
+  product_id | bigint | nullable=NO | default=None
+  quantity | integer | nullable=NO | default=0
+  reserved_quantity | integer | nullable=NO | default=0
+  updated_at | timestamp with time zone | nullable=NO | default=now()
+
+[simulation_products] rows=1
+  id | bigint | nullable=NO | default=None
+  sku | character varying | nullable=NO | default=None
+  name | character varying | nullable=NO | default=None
+  description | text | nullable=YES | default=None
+  created_at | timestamp with time zone | nullable=NO | default=now()
+
+[simulation_runs] rows=1
+  id | bigint | nullable=NO | default=None
+  run_name | character varying | nullable=NO | default=None
+  description | text | nullable=YES | default=None
+  configuration | jsonb | nullable=YES | default=None
+  status | character varying | nullable=NO | default='created'::character varying
+  started_at | timestamp with time zone | nullable=YES | default=None
+  completed_at | timestamp with time zone | nullable=YES | default=None
+  created_at | timestamp with time zone | nullable=NO | default=now()
+
+[stores] rows=1115
+  store_id | integer | nullable=NO | default=None
+  store_type | character varying | nullable=YES | default=None
+  assortment | character varying | nullable=YES | default=None
+  competition_distance | integer | nullable=YES | default=None
+  competition_open_since_month | integer | nullable=YES | default=None
+  competition_open_since_year | integer | nullable=YES | default=None
+  promo2 | boolean | nullable=YES | default=None
+  promo2_since_week | integer | nullable=YES | default=None
+  promo2_since_year | integer | nullable=YES | default=None
+  promo_interval | character varying | nullable=YES | default=None
+  metadata_import_id | bigint | nullable=YES | default=None
+
+[transactions_log] rows=21
+  id | bigint | nullable=NO | default=None
+  simulation_run_id | bigint | nullable=NO | default=None
+  purchase_attempt_id | bigint | nullable=YES | default=None
+  action | character varying | nullable=NO | default=None
+  outcome | jsonb | nullable=YES | default=None
+  created_at | timestamp with time zone | nullable=NO | default=now()
+
+[users] rows=2
+  id | bigint | nullable=NO | default=None
+  email | character varying | nullable=NO | default=None
+  password_hash | character varying | nullable=NO | default=None
+  role | character varying | nullable=NO | default='analyst'::character varying
+  status | character varying | nullable=NO | default='active'::character varying
+  created_at | timestamp with time zone | nullable=NO | default=now()
+  updated_at | timestamp with time zone | nullable=NO | default=now()

@@ -1,0 +1,29 @@
+graph TD
+    REQ[Client Purchase Request]
+    RESP[Client Response]
+
+    P4_1[4.1 Inspect Idempotency Key]
+    CACHE{Key in Cache?}
+    REPLAY[Return Cached Outcome]
+
+    P4_2[4.2 Begin DB Transaction]
+    P4_3[4.3 SELECT FOR UPDATE on Inventory]
+    CHECK{Stock >= Requested Qty?}
+
+    P4_4[4.4 Atomic Stock Decrement]
+    P4_5[4.5 Insert Order & Inventory Transaction]
+    P4_6[4.6 Commit Transaction & Cache Result]
+    P4_7[4.7 Rollback Transaction & Return 409 Conflict]
+
+    REQ --> P4_1
+    P4_1 --> CACHE
+    CACHE -->|Yes| REPLAY --> RESP
+    CACHE -->|No| P4_2
+    P4_2 --> P4_3
+    P4_3 --> CHECK
+    CHECK -->|Yes| P4_4
+    P4_4 --> P4_5
+    P4_5 --> P4_6
+    P4_6 --> RESP
+    CHECK -->|No| P4_7
+    P4_7 --> RESP

@@ -1,0 +1,152 @@
+[
+  {
+    "path": "/",
+    "description": "Root",
+    "url": "https://database-management-system-s1g5.onrender.com/",
+    "status_code": 200,
+    "response_time_ms": 371.62,
+    "content_type": "application/json",
+    "body_preview": "{\"project\":\"FLASHCORE\",\"database\":\"flashcore_postgres_temp\",\"status\":\"running\"}",
+    "error": null
+  },
+  {
+    "path": "/health",
+    "description": "Health Check",
+    "url": "https://database-management-system-s1g5.onrender.com/health",
+    "status_code": 200,
+    "response_time_ms": 174.24,
+    "content_type": "application/json",
+    "body_preview": "{\"status\":\"healthy\"}",
+    "error": null
+  },
+  {
+    "path": "/health/database",
+    "description": "Database Health",
+    "url": "https://database-management-system-s1g5.onrender.com/health/database",
+    "status_code": 200,
+    "response_time_ms": 308.34,
+    "content_type": "application/json",
+    "body_preview": "{\"database\":\"flashcore_postgres_temp\",\"status\":\"connected\"}",
+    "error": null
+  },
+  {
+    "path": "/openapi.json",
+    "description": "OpenAPI Contract",
+    "url": "https://database-management-system-s1g5.onrender.com/openapi.json",
+    "status_code": 200,
+    "response_time_ms": 312.82,
+    "content_type": "application/json",
+    "body_preview": "{\"openapi\":\"3.1.0\",\"info\":{\"title\":\"FLASHCORE\",\"description\":\"Retail analytics and high-concurrency inventory simulation platform powered by authentic Rossmann historical store data.\",\"version\":\"1.0.0\"},\"paths\":{\"/api/auth/signup\":{\"post\":{\"tags\":[\"Authentication\"],\"summary\":\"Signup\",\"operationId\":\"",
+    "error": null
+  },
+  {
+    "path": "/docs",
+    "description": "Swagger UI",
+    "url": "https://database-management-system-s1g5.onrender.com/docs",
+    "status_code": 200,
+    "response_time_ms": 327.99,
+    "content_type": "text/html; charset=utf-8",
+    "body_preview": "\n    <!DOCTYPE html>\n    <html>\n    <head>\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n    <link type=\"text/css\" rel=\"stylesheet\" href=\"https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css\">\n    <link rel=\"shortcut icon\" href=\"https://fastapi.tiangolo.com/img/",
+    "error": null
+  },
+  {
+    "path": "/api/health",
+    "description": "API Health",
+    "url": "https://database-management-system-s1g5.onrender.com/api/health",
+    "status_code": 200,
+    "response_time_ms": 154.49,
+    "content_type": "application/json",
+    "body_preview": "{\"status\":\"healthy\",\"version\":\"1.0.0\",\"database\":\"flashcore_postgres_temp\",\"services\":[{\"name\":\"FastAPI Application\",\"status\":\"healthy\",\"detail\":\"Operational (v1.0.0)\"},{\"name\":\"PostgreSQL Database\",\"status\":\"healthy\",\"detail\":\"Connected to flashcore_postgres_temp\"}],\"checked_at\":\"2026-11-24T17:09:2",
+    "error": null
+  },
+  {
+    "path": "/api/health/database",
+    "description": "API Database Health",
+    "url": "https://database-management-system-s1g5.onrender.com/api/health/database",
+    "status_code": 200,
+    "response_time_ms": 324.71,
+    "content_type": "application/json",
+    "body_preview": "{\"database\":\"flashcore_postgres_temp\",\"status\":\"connected\"}",
+    "error": null
+  },
+  {
+    "path": "/api/imports",
+    "description": "Dataset Imports (Auth Protected)",
+    "url": "https://database-management-system-s1g5.onrender.com/api/imports",
+    "status_code": 401,
+    "response_time_ms": 133.34,
+    "content_type": "application/json",
+    "body_preview": "{\"detail\":\"Invalid or expired authentication credentials.\"}",
+    "error": null
+  },
+  {
+    "path": "/api/admin/audit-logs",
+    "description": "Admin Audit Logs (Auth Protected)",
+    "url": "https://database-management-system-s1g5.onrender.com/api/admin/audit-logs",
+    "status_code": 401,
+    "response_time_ms": 124.04,
+    "content_type": "application/json",
+    "body_preview": "{\"detail\":\"Invalid or expired authentication credentials.\"}",
+    "error": null
+  },
+  {
+    "path": "/api/rossmann/sales/summary",
+    "description": "Rossmann Sales Summary (Auth Protected)",
+    "url": "https://database-management-system-s1g5.onrender.com/api/rossmann/sales/summary",
+    "status_code": 401,
+    "response_time_ms": 136.46,
+    "content_type": "application/json",
+    "body_preview": "{\"detail\":\"Invalid or expired authentication credentials.\"}",
+    "error": null
+  },
+  {
+    "path": "/api/simulations/analytics/purchase-outcomes",
+    "description": "Purchase Outcomes (Auth Protected)",
+    "url": "https://database-management-system-s1g5.onrender.com/api/simulations/analytics/purchase-outcomes",
+    "status_code": 401,
+    "response_time_ms": 123.93,
+    "content_type": "application/json",
+    "body_preview": "{\"detail\":\"Invalid or expired authentication credentials.\"}",
+    "error": null
+  },
+  {
+    "path": "/api/simulations/products",
+    "description": "Simulation Products (Auth Protected)",
+    "url": "https://database-management-system-s1g5.onrender.com/api/simulations/products",
+    "status_code": 401,
+    "response_time_ms": 141.18,
+    "content_type": "application/json",
+    "body_preview": "{\"detail\":\"Invalid or expired authentication credentials.\"}",
+    "error": null
+  },
+  {
+    "path": "/api/simulations/inventory",
+    "description": "Simulation Inventory (Auth Protected)",
+    "url": "https://database-management-system-s1g5.onrender.com/api/simulations/inventory",
+    "status_code": 401,
+    "response_time_ms": 151.3,
+    "content_type": "application/json",
+    "body_preview": "{\"detail\":\"Invalid or expired authentication credentials.\"}",
+    "error": null
+  },
+  {
+    "path": "/api/simulations/transactions",
+    "description": "Simulation Transactions (Auth Protected)",
+    "url": "https://database-management-system-s1g5.onrender.com/api/simulations/transactions",
+    "status_code": 401,
+    "response_time_ms": 127.04,
+    "content_type": "application/json",
+    "body_preview": "{\"detail\":\"Invalid or expired authentication credentials.\"}",
+    "error": null
+  },
+  {
+    "path": "/api/simulations/strategies",
+    "description": "Simulation Concurrency Strategies",
+    "url": "https://database-management-system-s1g5.onrender.com/api/simulations/strategies",
+    "status_code": 200,
+    "response_time_ms": 140.17,
+    "content_type": "application/json",
+    "body_preview": "{\"items\":[{\"id\":\"atomic_update\",\"label\":\"Atomic Update (Optimistic)\"},{\"id\":\"select_for_update\",\"label\":\"Select for Update (Pessimistic)\"}]}",
+    "error": null
+  }
+]

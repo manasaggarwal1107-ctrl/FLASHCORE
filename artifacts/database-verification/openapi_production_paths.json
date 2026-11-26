@@ -1,0 +1,397 @@
+[
+  {
+    "path": "/",
+    "method": "GET",
+    "operationId": "root__get",
+    "tags": [],
+    "summary": "Root"
+  },
+  {
+    "path": "/api/admin/audit-logs",
+    "method": "GET",
+    "operationId": "list_audit_logs_api_admin_audit_logs_get",
+    "tags": [
+      "Administration"
+    ],
+    "summary": "List Audit Logs"
+  },
+  {
+    "path": "/api/admin/users",
+    "method": "GET",
+    "operationId": "list_users_api_admin_users_get",
+    "tags": [
+      "Administration"
+    ],
+    "summary": "List Users"
+  },
+  {
+    "path": "/api/admin/users/{user_id}/role",
+    "method": "PATCH",
+    "operationId": "update_user_role_api_admin_users__user_id__role_patch",
+    "tags": [
+      "Administration"
+    ],
+    "summary": "Update User Role"
+  },
+  {
+    "path": "/api/admin/users/{user_id}/status",
+    "method": "PATCH",
+    "operationId": "update_user_status_api_admin_users__user_id__status_patch",
+    "tags": [
+      "Administration"
+    ],
+    "summary": "Update User Status"
+  },
+  {
+    "path": "/api/auth/login",
+    "method": "POST",
+    "operationId": "login_api_auth_login_post",
+    "tags": [
+      "Authentication"
+    ],
+    "summary": "Login"
+  },
+  {
+    "path": "/api/auth/logout",
+    "method": "POST",
+    "operationId": "logout_api_auth_logout_post",
+    "tags": [
+      "Authentication"
+    ],
+    "summary": "Logout"
+  },
+  {
+    "path": "/api/auth/me",
+    "method": "GET",
+    "operationId": "get_profile_api_auth_me_get",
+    "tags": [
+      "Authentication"
+    ],
+    "summary": "Get Profile"
+  },
+  {
+    "path": "/api/auth/signup",
+    "method": "POST",
+    "operationId": "signup_api_auth_signup_post",
+    "tags": [
+      "Authentication"
+    ],
+    "summary": "Signup"
+  },
+  {
+    "path": "/api/health",
+    "method": "GET",
+    "operationId": "api_system_health_api_health_get",
+    "tags": [],
+    "summary": "Api System Health"
+  },
+  {
+    "path": "/api/health/database",
+    "method": "GET",
+    "operationId": "api_database_health_api_health_database_get",
+    "tags": [],
+    "summary": "Api Database Health"
+  },
+  {
+    "path": "/api/imports",
+    "method": "GET",
+    "operationId": "list_imports_api_imports_get",
+    "tags": [
+      "Dataset Imports"
+    ],
+    "summary": "List Imports"
+  },
+  {
+    "path": "/api/imports/{import_id}",
+    "method": "GET",
+    "operationId": "get_import_api_imports__import_id__get",
+    "tags": [
+      "Dataset Imports"
+    ],
+    "summary": "Get Import"
+  },
+  {
+    "path": "/api/rossmann/sales",
+    "method": "GET",
+    "operationId": "get_sales_api_rossmann_sales_get",
+    "tags": [
+      "Rossmann Historical Data"
+    ],
+    "summary": "Get Sales"
+  },
+  {
+    "path": "/api/rossmann/sales/customers-trend",
+    "method": "GET",
+    "operationId": "customers_trend_api_rossmann_sales_customers_trend_get",
+    "tags": [
+      "Rossmann Historical Data"
+    ],
+    "summary": "Customers Trend"
+  },
+  {
+    "path": "/api/rossmann/sales/promotion-analysis",
+    "method": "GET",
+    "operationId": "promotion_analysis_api_rossmann_sales_promotion_analysis_get",
+    "tags": [
+      "Rossmann Historical Data"
+    ],
+    "summary": "Promotion Analysis"
+  },
+  {
+    "path": "/api/rossmann/sales/summary",
+    "method": "GET",
+    "operationId": "sales_summary_api_rossmann_sales_summary_get",
+    "tags": [
+      "Rossmann Historical Data"
+    ],
+    "summary": "Sales Summary"
+  },
+  {
+    "path": "/api/rossmann/sales/trend",
+    "method": "GET",
+    "operationId": "sales_trend_api_rossmann_sales_trend_get",
+    "tags": [
+      "Rossmann Historical Data"
+    ],
+    "summary": "Sales Trend"
+  },
+  {
+    "path": "/api/rossmann/stores",
+    "method": "GET",
+    "operationId": "list_stores_api_rossmann_stores_get",
+    "tags": [
+      "Rossmann Historical Data"
+    ],
+    "summary": "List Stores"
+  },
+  {
+    "path": "/api/rossmann/stores/{store_id}",
+    "method": "GET",
+    "operationId": "get_store_api_rossmann_stores__store_id__get",
+    "tags": [
+      "Rossmann Historical Data"
+    ],
+    "summary": "Get Store"
+  },
+  {
+    "path": "/api/simulations/analytics/activity",
+    "method": "GET",
+    "operationId": "analytics_activity_api_simulations_analytics_activity_get",
+    "tags": [
+      "Retail Simulation Engine"
+    ],
+    "summary": "Analytics Activity"
+  },
+  {
+    "path": "/api/simulations/analytics/conversion",
+    "method": "GET",
+    "operationId": "analytics_conversion_api_simulations_analytics_conversion_get",
+    "tags": [
+      "Retail Simulation Engine"
+    ],
+    "summary": "Analytics Conversion"
+  },
+  {
+    "path": "/api/simulations/analytics/failure-rates",
+    "method": "GET",
+    "operationId": "analytics_failure_rates_api_simulations_analytics_failure_rates_get",
+    "tags": [
+      "Retail Simulation Engine"
+    ],
+    "summary": "Analytics Failure Rates"
+  },
+  {
+    "path": "/api/simulations/analytics/flash-sale-performance",
+    "method": "GET",
+    "operationId": "analytics_flash_sale_performance_api_simulations_analytics_flash_sale_performance_get",
+    "tags": [
+      "Retail Simulation Engine"
+    ],
+    "summary": "Analytics Flash Sale Performance"
+  },
+  {
+    "path": "/api/simulations/analytics/flash-sales-overview",
+    "method": "GET",
+    "operationId": "analytics_flash_sales_overview_api_simulations_analytics_flash_sales_overview_get",
+    "tags": [
+      "Retail Simulation Engine"
+    ],
+    "summary": "Analytics Flash Sales Overview"
+  },
+  {
+    "path": "/api/simulations/analytics/inventory-allocation",
+    "method": "GET",
+    "operationId": "analytics_inventory_allocation_api_simulations_analytics_inventory_allocation_get",
+    "tags": [
+      "Retail Simulation Engine"
+    ],
+    "summary": "Analytics Inventory Allocation"
+  },
+  {
+    "path": "/api/simulations/analytics/inventory-utilisation",
+    "method": "GET",
+    "operationId": "analytics_inventory_utilisation_api_simulations_analytics_inventory_utilisation_get",
+    "tags": [
+      "Retail Simulation Engine"
+    ],
+    "summary": "Analytics Inventory Utilisation"
+  },
+  {
+    "path": "/api/simulations/analytics/purchase-outcomes",
+    "method": "GET",
+    "operationId": "analytics_purchase_outcomes_api_simulations_analytics_purchase_outcomes_get",
+    "tags": [
+      "Retail Simulation Engine"
+    ],
+    "summary": "Analytics Purchase Outcomes"
+  },
+  {
+    "path": "/api/simulations/flash-sale-products/{sale_product_id}/purchase",
+    "method": "POST",
+    "operationId": "purchase_api_simulations_flash_sale_products__sale_product_id__purchase_post",
+    "tags": [
+      "Retail Simulation Engine"
+    ],
+    "summary": "Purchase"
+  },
+  {
+    "path": "/api/simulations/flash-sales/{sale_id}/activate",
+    "method": "POST",
+    "operationId": "activate_flash_sale_api_simulations_flash_sales__sale_id__activate_post",
+    "tags": [
+      "Retail Simulation Engine"
+    ],
+    "summary": "Activate Flash Sale"
+  },
+  {
+    "path": "/api/simulations/flash-sales/{sale_id}/products",
+    "method": "POST",
+    "operationId": "allocate_sale_stock_api_simulations_flash_sales__sale_id__products_post",
+    "tags": [
+      "Retail Simulation Engine"
+    ],
+    "summary": "Allocate Sale Stock"
+  },
+  {
+    "path": "/api/simulations/inventory",
+    "method": "GET",
+    "operationId": "list_inventory_api_simulations_inventory_get",
+    "tags": [
+      "Retail Simulation Engine"
+    ],
+    "summary": "List Inventory"
+  },
+  {
+    "path": "/api/simulations/inventory",
+    "method": "POST",
+    "operationId": "create_inventory_api_simulations_inventory_post",
+    "tags": [
+      "Retail Simulation Engine"
+    ],
+    "summary": "Create Inventory"
+  },
+  {
+    "path": "/api/simulations/inventory/{inventory_id}/adjust",
+    "method": "POST",
+    "operationId": "adjust_inventory_api_simulations_inventory__inventory_id__adjust_post",
+    "tags": [
+      "Retail Simulation Engine"
+    ],
+    "summary": "Adjust Inventory"
+  },
+  {
+    "path": "/api/simulations/products",
+    "method": "GET",
+    "operationId": "list_products_api_simulations_products_get",
+    "tags": [
+      "Retail Simulation Engine"
+    ],
+    "summary": "List Products"
+  },
+  {
+    "path": "/api/simulations/products",
+    "method": "POST",
+    "operationId": "create_product_api_simulations_products_post",
+    "tags": [
+      "Retail Simulation Engine"
+    ],
+    "summary": "Create Product"
+  },
+  {
+    "path": "/api/simulations/runs",
+    "method": "GET",
+    "operationId": "list_runs_api_simulations_runs_get",
+    "tags": [
+      "Retail Simulation Engine"
+    ],
+    "summary": "List Runs"
+  },
+  {
+    "path": "/api/simulations/runs",
+    "method": "POST",
+    "operationId": "create_run_api_simulations_runs_post",
+    "tags": [
+      "Retail Simulation Engine"
+    ],
+    "summary": "Create Run"
+  },
+  {
+    "path": "/api/simulations/runs/{run_id}/flash-sales",
+    "method": "POST",
+    "operationId": "create_flash_sale_api_simulations_runs__run_id__flash_sales_post",
+    "tags": [
+      "Retail Simulation Engine"
+    ],
+    "summary": "Create Flash Sale"
+  },
+  {
+    "path": "/api/simulations/runs/{run_id}/summary",
+    "method": "GET",
+    "operationId": "run_summary_api_simulations_runs__run_id__summary_get",
+    "tags": [
+      "Retail Simulation Engine"
+    ],
+    "summary": "Run Summary"
+  },
+  {
+    "path": "/api/simulations/strategies",
+    "method": "GET",
+    "operationId": "get_strategies_api_simulations_strategies_get",
+    "tags": [
+      "Retail Simulation Engine"
+    ],
+    "summary": "Get Strategies"
+  },
+  {
+    "path": "/api/simulations/transactions",
+    "method": "GET",
+    "operationId": "list_transactions_api_simulations_transactions_get",
+    "tags": [
+      "Retail Simulation Engine"
+    ],
+    "summary": "List Transactions"
+  },
+  {
+    "path": "/api/simulations/transactions/{attempt_id}",
+    "method": "GET",
+    "operationId": "get_transaction_api_simulations_transactions__attempt_id__get",
+    "tags": [
+      "Retail Simulation Engine"
+    ],
+    "summary": "Get Transaction"
+  },
+  {
+    "path": "/health",
+    "method": "GET",
+    "operationId": "health_health_get",
+    "tags": [],
+    "summary": "Health"
+  },
+  {
+    "path": "/health/database",
+    "method": "GET",
+    "operationId": "database_health_health_database_get",
+    "tags": [],
+    "summary": "Database Health"
+  }
+]

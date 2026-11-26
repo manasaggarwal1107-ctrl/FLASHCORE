@@ -1,0 +1,103 @@
+{
+  "t1": {
+    "status": 200,
+    "body": "{\"status\":\"healthy\"}"
+  },
+  "t2": {
+    "status": 200,
+    "body": "{\"database\":\"flashcore_postgres_temp\",\"status\":\"connected\"}"
+  },
+  "t3_paths_count": 42,
+  "t_routes": [
+    {
+      "path": "/api/admin/audit-logs",
+      "desc": "Audit logs endpoint",
+      "status": 401,
+      "body": "{\"detail\":\"Invalid or expired authentication credentials.\"}"
+    },
+    {
+      "path": "/api/simulations/strategies",
+      "desc": "Simulation strategies endpoint",
+      "status": 200,
+      "body": "{\"items\":[{\"id\":\"atomic_update\",\"label\":\"Atomic Update (Optimistic)\"},{\"id\":\"select_for_update\",\"label\":\"Select for Update (Pessimistic)\"}]}"
+    },
+    {
+      "path": "/api/simulations/analytics/purchase-outcomes",
+      "desc": "Simulation purchase outcomes",
+      "status": 401,
+      "body": "{\"detail\":\"Invalid or expired authentication credentials.\"}"
+    },
+    {
+      "path": "/api/simulations/analytics/inventory-allocation",
+      "desc": "Simulation inventory allocation",
+      "status": 401,
+      "body": "{\"detail\":\"Invalid or expired authentication credentials.\"}"
+    },
+    {
+      "path": "/api/simulations/analytics/flash-sales-overview",
+      "desc": "Simulation flash sales overview",
+      "status": 401,
+      "body": "{\"detail\":\"Invalid or expired authentication credentials.\"}"
+    },
+    {
+      "path": "/api/simulations/analytics/activity",
+      "desc": "Simulation activity feed",
+      "status": 401,
+      "body": "{\"detail\":\"Invalid or expired authentication credentials.\"}"
+    },
+    {
+      "path": "/api/imports",
+      "desc": "Dataset imports history",
+      "status": 401,
+      "body": "{\"detail\":\"Invalid or expired authentication credentials.\"}"
+    },
+    {
+      "path": "/api/imports/1",
+      "desc": "Dataset import detail (id 1)",
+      "status": 401,
+      "body": "{\"detail\":\"Invalid or expired authentication credentials.\"}"
+    },
+    {
+      "path": "/api/health",
+      "desc": "System health duplicate endpoint",
+      "status": 200,
+      "body": "{\"status\":\"healthy\",\"version\":\"1.0.0\",\"database\":\"flashcore_postgres_temp\",\"services\":[{\"name\":\"FastAPI Application\",\"status\":\"healthy\",\"detail\":\"Operational (v1.0.0)\"},{\"name\":\"PostgreSQL Database\",\"status\":\"healthy\",\"detail\":\"Connected to flashcore_postgres_temp\"}],\"checked_at\":\"2026-11-24T13:56:5"
+    },
+    {
+      "path": "/api/health/database",
+      "desc": "Database health duplicate endpoint",
+      "status": 200,
+      "body": "{\"database\":\"flashcore_postgres_temp\",\"status\":\"connected\"}"
+    }
+  ],
+  "t_auth_anon": {
+    "status": 401,
+    "body": "{\"detail\":\"Invalid or expired authentication credentials.\"}"
+  },
+  "t_auth_invalid": {
+    "status": 401,
+    "body": "{\"detail\":\"Invalid or expired authentication credentials.\"}"
+  },
+  "t_auth_malformed": {
+    "status": 401,
+    "body": "{\"detail\":\"Invalid or expired authentication credentials.\"}"
+  },
+  "t_val_login": {
+    "status": 422,
+    "body": "{\"detail\":[{\"type\":\"missing\",\"loc\":[\"body\",\"email\"],\"msg\":\"Field required\",\"input\":{}},{\"type\":\"missing\",\"loc\":[\"body\",\"password\"],\"msg\":\"Field required\",\"input\":{}}]}"
+  },
+  "t_val_signup": {
+    "status": 422,
+    "body": "{\"detail\":[{\"type\":\"value_error\",\"loc\":[\"body\",\"email\"],\"msg\":\"Value error, Enter a valid email address.\",\"input\":\"invalid\",\"ctx\":{\"error\":{}}},{\"type\":\"missing\",\"loc\":[\"body\",\"password\"],\"msg\":\"Field required\",\"input\":{\"email\":\"invalid\"}}]}"
+  },
+  "t_cors": {
+    "status": 200,
+    "allow_origin": "https://flashcore-psi.vercel.app",
+    "allow_methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+    "allow_headers": "Accept, Accept-Language, Authorization, Content-Language, Content-Type, Idempotency-Key"
+  },
+  "t_frontend": {
+    "status": 200,
+    "body_len": 300
+  }
+}

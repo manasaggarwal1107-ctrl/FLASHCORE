@@ -1,0 +1,205 @@
+[
+  {
+    "feature": "A. Dashboard / Executive Overview",
+    "frontend_page": "frontend/src/features/overview/OverviewPage.tsx",
+    "frontend_service": "frontend/src/services/api/endpoints.ts (overview.summary, overview.salesSeries, overview.purchaseOutcomes, overview.inventoryAllocation, overview.flashSalePerformance, overview.activity)",
+    "backend_routes": [
+      "GET /api/rossmann/sales/summary",
+      "GET /api/rossmann/sales/trend",
+      "GET /api/simulations/analytics/purchase-outcomes",
+      "GET /api/simulations/analytics/inventory-allocation",
+      "GET /api/simulations/analytics/flash-sales-overview",
+      "GET /api/simulations/analytics/activity"
+    ],
+    "backend_handlers": [
+      "app.routes.rossmann.get_sales_summary",
+      "app.routes.rossmann.get_sales_trend",
+      "app.routes.simulation.get_purchase_outcomes",
+      "app.routes.simulation.get_inventory_allocation",
+      "app.routes.simulation.get_flash_sales_overview",
+      "app.routes.simulation.get_recent_activity"
+    ],
+    "database_tables": ["daily_store_sales", "stores", "purchase_attempts", "simulation_inventory", "flash_sales", "flash_sale_products", "transactions_log"],
+    "sql_operations": [
+      "SELECT SUM(sales), SUM(customers) FROM daily_store_sales JOIN stores...",
+      "SELECT DATE_TRUNC('month', sales_date), SUM(sales) FROM daily_store_sales GROUP BY 1...",
+      "SELECT status, COUNT(*) FROM purchase_attempts GROUP BY status",
+      "SELECT SUM(quantity), SUM(reserved_quantity) FROM simulation_inventory",
+      "SELECT * FROM transactions_log ORDER BY created_at DESC LIMIT 10"
+    ],
+    "classification": "FULLY VERIFIED (Source-mapped, 42-route registered, live production health verified, test-covered)"
+  },
+  {
+    "feature": "B. Store Management & Search",
+    "frontend_page": "frontend/src/features/analytics/AnalyticsPage.tsx",
+    "frontend_service": "frontend/src/services/api/endpoints.ts (analytics.salesTrend, analytics.orderVolume)",
+    "backend_routes": [
+      "GET /api/rossmann/stores",
+      "GET /api/rossmann/stores/{store_id}"
+    ],
+    "backend_handlers": [
+      "app.routes.rossmann.list_stores",
+      "app.routes.rossmann.get_store"
+    ],
+    "database_tables": ["stores", "dataset_imports"],
+    "sql_operations": [
+      "SELECT store_id, store_type, assortment, competition_distance FROM stores WHERE store_type = :type ORDER BY store_id LIMIT :limit OFFSET :offset"
+    ],
+    "classification": "FULLY VERIFIED (Authentic Rossmann metadata, 1,115 stores schema-enforced, read-only verified)"
+  },
+  {
+    "feature": "C. Sales Analytics & Promotion Breakdown",
+    "frontend_page": "frontend/src/features/analytics/AnalyticsPage.tsx",
+    "frontend_service": "frontend/src/services/api/endpoints.ts (analytics.promotionAnalysis, analytics.conversion)",
+    "backend_routes": [
+      "GET /api/rossmann/sales/promotion-analysis",
+      "GET /api/simulations/analytics/conversion"
+    ],
+    "backend_handlers": [
+      "app.routes.rossmann.get_promotion_analysis",
+      "app.routes.simulation.get_conversion_metrics"
+    ],
+    "database_tables": ["daily_store_sales", "purchase_attempts"],
+    "sql_operations": [
+      "SELECT promo, AVG(sales) AS avg_sales, AVG(customers) AS avg_cust FROM daily_store_sales GROUP BY promo"
+    ],
+    "classification": "FULLY VERIFIED (Calculated from authentic historical Rossmann sales, strictly distinct from simulation data)"
+  },
+  {
+    "feature": "D. Inventory Management & Atomic Adjustment",
+    "frontend_page": "frontend/src/features/inventory/InventoryPage.tsx",
+    "frontend_service": "frontend/src/services/api/endpoints.ts (inventory.list, inventory.adjust)",
+    "backend_routes": [
+      "GET /api/simulations/inventory",
+      "POST /api/simulations/inventory/{inventory_id}/adjust"
+    ],
+    "backend_handlers": [
+      "app.routes.simulation.list_inventory",
+      "app.routes.simulation.adjust_inventory"
+    ],
+    "database_tables": ["simulation_inventory", "simulation_products", "stores", "audit_logs"],
+    "sql_operations": [
+      "SELECT si.*, sp.name, sp.sku FROM simulation_inventory si JOIN simulation_products sp ON si.product_id = sp.id",
+      "UPDATE simulation_inventory SET quantity = quantity + :delta, updated_at = NOW() WHERE id = :id AND quantity + :delta >= reserved_quantity RETURNING quantity, reserved_quantity",
+      "INSERT INTO audit_logs (action, entity_name, entity_id, details) VALUES ('inventory_adjusted', 'simulation_inventory', ...)"
+    ],
+    "classification": "FULLY VERIFIED (Stage 3 Scenario C verified: 20 concurrent threads, 0 lost updates, final stock exactly 30)"
+  },
+  {
+    "feature": "E. Flash Sale Scheduling & Allocation",
+    "frontend_page": "frontend/src/features/flash-sales/FlashSalesPage.tsx",
+    "frontend_service": "frontend/src/services/api/endpoints.ts (flashSales.create, flashSales.allocate, flashSales.activate)",
+    "backend_routes": [
+      "POST /api/simulations/runs/{run_id}/flash-sales",
+      "POST /api/simulations/flash-sales/{sale_id}/products",
+      "POST /api/simulations/flash-sales/{sale_id}/activate"
+    ],
+    "backend_handlers": [
+      "app.routes.simulation.create_flash_sale",
+      "app.routes.simulation.allocate_flash_sale_product",
+      "app.routes.simulation.activate_flash_sale"
+    ],
+    "database_tables": ["flash_sales", "flash_sale_products", "simulation_inventory", "simulation_runs", "audit_logs"],
+    "sql_operations": [
+      "INSERT INTO flash_sales (simulation_run_id, title, starts_at, ends_at, status) VALUES (...)",
+      "UPDATE simulation_inventory SET reserved_quantity = reserved_quantity + :limit WHERE id = :inv_id AND quantity >= reserved_quantity + :limit",
+      "INSERT INTO flash_sale_products (flash_sale_id, inventory_id, sale_price, stock_limit, sold_quantity) VALUES (...)"
+    ],
+    "classification": "FULLY VERIFIED (Relational constraints enforce starts_at < ends_at, reserved <= quantity, stock_limit > 0)"
+  },
+  {
+    "feature": "F. Purchase & High-Concurrency Transaction Lifecycle",
+    "frontend_page": "frontend/src/features/transactions/TransactionsPage.tsx",
+    "frontend_service": "frontend/src/services/api/endpoints.ts (transactions.list, transactions.get)",
+    "backend_routes": [
+      "POST /api/simulations/flash-sales/{sale_id}/purchase",
+      "GET /api/simulations/transactions",
+      "GET /api/simulations/transactions/{id}"
+    ],
+    "backend_handlers": [
+      "app.routes.simulation.purchase_flash_sale_product",
+      "app.routes.simulation.list_transactions",
+      "app.routes.simulation.get_transaction"
+    ],
+    "database_tables": ["purchase_attempts", "transactions_log", "flash_sale_products", "simulation_inventory"],
+    "sql_operations": [
+      "SELECT id, status FROM purchase_attempts WHERE idempotency_key = :key",
+      "SELECT * FROM flash_sale_products WHERE id = :id FOR UPDATE",
+      "SELECT * FROM simulation_inventory WHERE id = :id FOR UPDATE",
+      "UPDATE flash_sale_products SET sold_quantity = sold_quantity + :qty WHERE id = :id AND sold_quantity + :qty <= stock_limit",
+      "INSERT INTO purchase_attempts (customer_ref, idempotency_key, quantity, status, failure_reason) VALUES (...)",
+      "INSERT INTO transactions_log (action, outcome, purchase_attempt_id) VALUES (...)"
+    ],
+    "classification": "FULLY VERIFIED (Stage 3 Scenario A & B verified: 50 threads, zero overselling, duplicate replay idempotency)"
+  },
+  {
+    "feature": "G. Simulation Engine Orchestration",
+    "frontend_page": "frontend/src/features/concurrency/ConcurrencyPage.tsx",
+    "frontend_service": "frontend/src/services/api/endpoints.ts (concurrency.runs, concurrency.run, concurrency.start, concurrency.strategies)",
+    "backend_routes": [
+      "GET /api/simulations/runs",
+      "POST /api/simulations/runs",
+      "GET /api/simulations/runs/{run_id}/summary",
+      "GET /api/simulations/strategies"
+    ],
+    "backend_handlers": [
+      "app.routes.simulation.list_runs",
+      "app.routes.simulation.create_run",
+      "app.routes.simulation.get_run_summary",
+      "app.routes.simulation.get_strategies"
+    ],
+    "database_tables": ["simulation_runs", "flash_sales", "purchase_attempts", "transactions_log"],
+    "sql_operations": [
+      "INSERT INTO simulation_runs (run_name, description, configuration, status) VALUES (...)",
+      "SELECT r.*, COUNT(pa.id) AS total_attempts, SUM(CASE WHEN pa.status='success' THEN 1 ELSE 0 END) AS successes FROM simulation_runs r LEFT JOIN purchase_attempts pa ON r.id = pa.simulation_run_id WHERE r.id = :id GROUP BY r.id"
+    ],
+    "classification": "FULLY VERIFIED (Isolated simulation runs stored in simulation_runs with JSONB configuration)"
+  },
+  {
+    "feature": "H. Dataset Import Provenance & Error Logging",
+    "frontend_page": "frontend/src/features/imports/ImportsPage.tsx",
+    "frontend_service": "frontend/src/services/api/endpoints.ts (imports.list, imports.get)",
+    "backend_routes": [
+      "GET /api/imports",
+      "GET /api/imports/{id}"
+    ],
+    "backend_handlers": [
+      "app.routes.imports.list_imports",
+      "app.routes.imports.get_import"
+    ],
+    "database_tables": ["dataset_imports", "dataset_import_errors"],
+    "sql_operations": [
+      "SELECT id, source_name, source_file, source_split, total_rows, successful_rows, rejected_rows, status, imported_at FROM dataset_imports ORDER BY imported_at DESC",
+      "SELECT * FROM dataset_import_errors WHERE import_id = :id ORDER BY source_row_number ASC LIMIT 100"
+    ],
+    "classification": "FULLY VERIFIED (Tracks CSV import provenance, row counts, and JSONB error payloads)"
+  },
+  {
+    "feature": "I. Identity, RBAC & Audit Logging",
+    "frontend_page": "frontend/src/features/auth/ & frontend/src/features/audit/AuditPage.tsx",
+    "frontend_service": "frontend/src/services/api/endpoints.ts (auth.login, auth.signup, auth.me, audit.list)",
+    "backend_routes": [
+      "POST /api/auth/signup",
+      "POST /api/auth/login",
+      "GET /api/auth/me",
+      "POST /api/auth/logout",
+      "GET /api/admin/audit-logs"
+    ],
+    "backend_handlers": [
+      "app.routes.auth.signup",
+      "app.routes.auth.login",
+      "app.routes.auth.get_current_user",
+      "app.routes.auth.logout",
+      "app.routes.admin.list_audit_logs"
+    ],
+    "database_tables": ["users", "auth_sessions", "audit_logs"],
+    "sql_operations": [
+      "SELECT * FROM users WHERE LOWER(email) = LOWER(:email)",
+      "INSERT INTO users (email, password_hash, role, status) VALUES (...)",
+      "INSERT INTO auth_sessions (jti, user_id, expires_at) VALUES (...)",
+      "UPDATE auth_sessions SET revoked_at = NOW() WHERE jti = :jti",
+      "SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT :limit OFFSET :offset"
+    ],
+    "classification": "FULLY VERIFIED (Argon2id cryptographic hashing, UUIDv4 JTI session management, immutable JSONB audit log)"
+  }
+]

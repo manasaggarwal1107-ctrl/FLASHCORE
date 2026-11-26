@@ -1,0 +1,32 @@
+sequenceDiagram
+    autonumber
+    actor Client as User / Browser
+    participant API as FastAPI /auth/login
+    participant Hasher as Argon2id Hasher
+    participant JWT as PyJWT Token Engine
+    participant Guard as RBAC Authorization Guard
+    participant Res as Protected Resource
+
+    Client->>API: POST /api/auth/login {email, password}
+    API->>API: Query User by Email
+    API->>Hasher: Verify password against password_hash
+    alt Invalid Password
+        Hasher-->>API: Password Mismatch
+        API-->>Client: HTTP 401 Unauthorized
+    else Valid Credentials
+        Hasher-->>API: Password OK
+        API->>JWT: Generate Access Token (sub, role, exp=120m)
+        JWT-->>API: Signed JWT Token (HS256)
+        API-->>Client: HTTP 200 OK {accessToken, user}
+    end
+
+    Note over Client,Res: Subsequent Authenticated Requests
+    Client->>Guard: GET /api/admin/audit (Header: Bearer JWT)
+    Guard->>JWT: Verify Signature & Expiration
+    Guard->>Guard: Check User Role == 'admin'
+    alt Insufficient Privileges
+        Guard-->>Client: HTTP 403 Forbidden
+    else Authorized
+        Guard->>Res: Forward Request
+        Res-->>Client: HTTP 200 OK (Audit Log Records)
+    end

@@ -1,0 +1,15 @@
+graph TD
+    BURST[500 Concurrent Worker Requests]
+    QUEUE[Connection Pool Queue - max_overflow=20]
+    SERIAL[Row Lock Serialization - Target Product]
+    
+    BURST --> QUEUE
+    QUEUE --> SERIAL
+
+    subgraph Outcome_Distribution [Transactional Invariant Results]
+        OK[100 Confirmed Orders - Stock Deducted]
+        REJ[400 Rejected Requests - 409 Conflict]
+    end
+
+    SERIAL -->|Initial Stock Available| OK
+    SERIAL -->|Stock Exhausted| REJ

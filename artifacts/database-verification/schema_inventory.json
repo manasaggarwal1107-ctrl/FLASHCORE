@@ -1,0 +1,184 @@
+{
+  "database_engine": "PostgreSQL",
+  "local_version": "PostgreSQL 18.6 (local development installation at C:\\Program Files\\PostgreSQL\\18)",
+  "production_version": "PostgreSQL 16+ (Render Managed PostgreSQL 'flashcore_postgres_temp')",
+  "isolation_level": "READ COMMITTED (Default) with explicit SELECT ... FOR UPDATE row locks",
+  "tables_count": 14,
+  "tables": [
+    {
+      "name": "users",
+      "pk": "id",
+      "type": "Identity (BIGINT ALWAYS AS IDENTITY)",
+      "columns_count": 7,
+      "constraints": ["chk_users_role", "chk_users_status", "uq_users_email_lower"],
+      "foreign_keys": [],
+      "indexes": ["users_pkey", "uq_users_email_lower"],
+      "domain": "Security & RBAC Authentication"
+    },
+    {
+      "name": "auth_sessions",
+      "pk": "jti",
+      "type": "UUIDv4",
+      "columns_count": 5,
+      "constraints": ["auth_sessions_pkey", "auth_sessions_user_id_fkey"],
+      "foreign_keys": [{"column": "user_id", "references": "users(id)", "on_delete": "CASCADE"}],
+      "indexes": ["auth_sessions_pkey", "idx_auth_sessions_user_id", "idx_auth_sessions_expires_at"],
+      "domain": "Session Lifecycle & Token Revocation"
+    },
+    {
+      "name": "dataset_imports",
+      "pk": "id",
+      "type": "BIGINT ALWAYS AS IDENTITY",
+      "columns_count": 11,
+      "constraints": ["chk_import_status", "chk_import_counts"],
+      "foreign_keys": [],
+      "indexes": ["dataset_imports_pkey"],
+      "domain": "ETL Ingestion & Provenance Tracking"
+    },
+    {
+      "name": "dataset_import_errors",
+      "pk": "id",
+      "type": "BIGINT ALWAYS AS IDENTITY",
+      "columns_count": 6,
+      "constraints": ["dataset_import_errors_pkey", "dataset_import_errors_import_id_fkey"],
+      "foreign_keys": [{"column": "import_id", "references": "dataset_imports(id)", "on_delete": "NO ACTION"}],
+      "indexes": ["dataset_import_errors_pkey"],
+      "domain": "ETL Audit & Granular Ingestion Error Logging"
+    },
+    {
+      "name": "stores",
+      "pk": "store_id",
+      "type": "INTEGER",
+      "columns_count": 11,
+      "constraints": ["chk_store_type", "chk_assortment", "chk_competition_distance"],
+      "foreign_keys": [{"column": "metadata_import_id", "references": "dataset_imports(id)", "on_delete": "NO ACTION"}],
+      "indexes": ["stores_pkey"],
+      "domain": "Rossmann Historical Store Metadata (1,115 Stores)"
+    },
+    {
+      "name": "daily_store_sales",
+      "pk": "(store_id, sales_date)",
+      "type": "Composite PK (INTEGER, DATE)",
+      "columns_count": 12,
+      "constraints": ["chk_day_of_week", "chk_sales", "chk_customers", "chk_state_holiday"],
+      "foreign_keys": [
+        {"column": "store_id", "references": "stores(store_id)", "on_delete": "NO ACTION"},
+        {"column": "import_id", "references": "dataset_imports(id)", "on_delete": "NO ACTION"}
+      ],
+      "indexes": ["daily_store_sales_pkey", "idx_daily_sales_date", "idx_daily_sales_store_date", "idx_daily_sales_promo"],
+      "domain": "Rossmann Historical Sales & Footfall Records"
+    },
+    {
+      "name": "simulation_runs",
+      "pk": "id",
+      "type": "BIGINT ALWAYS AS IDENTITY",
+      "columns_count": 8,
+      "constraints": ["chk_simulation_status"],
+      "foreign_keys": [],
+      "indexes": ["simulation_runs_pkey"],
+      "domain": "Simulation Execution Lifecycle & Parameters"
+    },
+    {
+      "name": "simulation_products",
+      "pk": "id",
+      "type": "BIGINT ALWAYS AS IDENTITY",
+      "columns_count": 5,
+      "constraints": ["simulation_products_sku_key"],
+      "foreign_keys": [],
+      "indexes": ["simulation_products_pkey", "simulation_products_sku_key"],
+      "domain": "Simulated E-Commerce Product Catalog"
+    },
+    {
+      "name": "simulation_inventory",
+      "pk": "id",
+      "type": "BIGINT ALWAYS AS IDENTITY",
+      "columns_count": 6,
+      "constraints": ["uq_simulation_store_product", "chk_simulation_quantity", "chk_simulation_reserved"],
+      "foreign_keys": [
+        {"column": "store_id", "references": "stores(store_id)", "on_delete": "NO ACTION"},
+        {"column": "product_id", "references": "simulation_products(id)", "on_delete": "NO ACTION"}
+      ],
+      "indexes": ["simulation_inventory_pkey", "uq_simulation_store_product"],
+      "domain": "Multi-Store Physical & Reserved Inventory"
+    },
+    {
+      "name": "flash_sales",
+      "pk": "id",
+      "type": "BIGINT ALWAYS AS IDENTITY",
+      "columns_count": 7,
+      "constraints": ["chk_flash_sale_dates", "chk_flash_sale_status"],
+      "foreign_keys": [{"column": "simulation_run_id", "references": "simulation_runs(id)", "on_delete": "NO ACTION"}],
+      "indexes": ["flash_sales_pkey"],
+      "domain": "Flash Sale Event Configurations & Scheduling"
+    },
+    {
+      "name": "flash_sale_products",
+      "pk": "id",
+      "type": "BIGINT ALWAYS AS IDENTITY",
+      "columns_count": 7,
+      "constraints": ["uq_flash_sale_inventory", "chk_sale_price", "chk_sale_stock"],
+      "foreign_keys": [
+        {"column": "flash_sale_id", "references": "flash_sales(id)", "on_delete": "NO ACTION"},
+        {"column": "inventory_id", "references": "simulation_inventory(id)", "on_delete": "NO ACTION"}
+      ],
+      "indexes": ["flash_sale_products_pkey", "uq_flash_sale_inventory"],
+      "domain": "Discount Quota & Sold Allocation Counters"
+    },
+    {
+      "name": "purchase_attempts",
+      "pk": "id",
+      "type": "BIGINT ALWAYS AS IDENTITY",
+      "columns_count": 9,
+      "constraints": ["chk_purchase_quantity", "chk_purchase_status", "purchase_attempts_idempotency_key_key"],
+      "foreign_keys": [
+        {"column": "simulation_run_id", "references": "simulation_runs(id)", "on_delete": "NO ACTION"},
+        {"column": "flash_sale_product_id", "references": "flash_sale_products(id)", "on_delete": "NO ACTION"}
+      ],
+      "indexes": [
+        "purchase_attempts_pkey",
+        "purchase_attempts_idempotency_key_key",
+        "uq_successful_customer_purchase",
+        "idx_purchase_attempts_run",
+        "idx_purchase_attempts_status"
+      ],
+      "domain": "Transactional Checkout Requests & Idempotency Audit"
+    },
+    {
+      "name": "transactions_log",
+      "pk": "id",
+      "type": "BIGINT ALWAYS AS IDENTITY",
+      "columns_count": 6,
+      "constraints": ["transactions_log_pkey"],
+      "foreign_keys": [
+        {"column": "simulation_run_id", "references": "simulation_runs(id)", "on_delete": "NO ACTION"},
+        {"column": "purchase_attempt_id", "references": "purchase_attempts(id)", "on_delete": "NO ACTION"}
+      ],
+      "indexes": ["transactions_log_pkey"],
+      "domain": "Financial Audit Log & Outcome Payload Snapshots"
+    },
+    {
+      "name": "audit_logs",
+      "pk": "id",
+      "type": "BIGINT ALWAYS AS IDENTITY",
+      "columns_count": 8,
+      "constraints": ["audit_logs_pkey"],
+      "foreign_keys": [],
+      "indexes": ["audit_logs_pkey", "idx_audit_entity"],
+      "domain": "System-Wide Immutable Operational Audit Trail"
+    }
+  ],
+  "derived_views": [
+    {
+      "name": "orders",
+      "implementation": "Synthesized analytical view in frontend OrdersPage.tsx",
+      "source_tables": ["purchase_attempts", "transactions_log"],
+      "explanation": "No standalone orders table exists. Successful customer purchase attempts represent confirmed orders, mapping customer_ref, flash_sale_product_id, and transaction payload."
+    },
+    {
+      "name": "customers",
+      "implementation": "Synthesized analytical view in frontend CustomersPage.tsx",
+      "source_tables": ["purchase_attempts"],
+      "explanation": "No standalone customers table exists. Customers are tokenized pseudonymous identifiers (customer_ref) tracked across purchase_attempts with aggregated purchase counts."
+    }
+  ]
+}

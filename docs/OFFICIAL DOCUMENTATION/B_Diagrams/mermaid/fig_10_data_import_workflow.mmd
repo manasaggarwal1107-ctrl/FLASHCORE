@@ -1,0 +1,19 @@
+graph TD
+    FILE[Raw Rossmann CSV File]
+    UPLOAD[POST /api/imports/upload]
+    VALIDATE[Header & Datatype Validation]
+    PARSE[Batch Row Parsing - 1000 rows/chunk]
+    FK_CHECK{FK Store Exists?}
+    DISCARD[Log Rejected Row to Error Ledger]
+    INSERT[COPY / Batch INSERT to PostgreSQL]
+    AUDIT[Record Import Summary in data_imports]
+    NOTIFY[Return Import Result Status]
+
+    FILE --> UPLOAD
+    UPLOAD --> VALIDATE
+    VALIDATE --> PARSE
+    PARSE --> FK_CHECK
+    FK_CHECK -->|No| DISCARD
+    FK_CHECK -->|Yes| INSERT
+    INSERT --> AUDIT
+    AUDIT --> NOTIFY

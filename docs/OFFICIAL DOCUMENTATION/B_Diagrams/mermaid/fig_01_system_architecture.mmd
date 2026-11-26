@@ -1,0 +1,36 @@
+graph TD
+    subgraph Client_Tier [Client Tier - Single Page Application]
+        UI[React 18 / TypeScript SPA]
+        VITE[Vite 5 Bundler / Tailwind CSS]
+        QUERY[TanStack Query v5 Cache]
+        ROUTER[React Router v6]
+    end
+
+    subgraph App_Tier [Application Tier - FastAPI ASGI Engine]
+        GATEWAY[ASGI HTTP Server - Uvicorn]
+        ROUTERS[FastAPI Domain Routers]
+        AUTH_GUARD[Auth & RBAC Middleware]
+        IDEMP[Idempotency Guard - SHA-256]
+        CONC[Concurrency & Lock Manager]
+        ORM[SQLAlchemy 2.0 ORM / Psycopg 3]
+    end
+
+    subgraph Data_Tier [Data Tier - PostgreSQL Relational Database]
+        PG[(PostgreSQL 16+ Database)]
+        TABLES[14 Tables / 130 Constraints]
+        INDEXES[28 B-Tree Indexes]
+        LOCKS[Row-Level Locking Engine - SELECT FOR UPDATE]
+    end
+
+    UI --> QUERY
+    QUERY --> ROUTER
+    ROUTER -->|HTTPS / JSON REST API| GATEWAY
+    GATEWAY --> AUTH_GUARD
+    AUTH_GUARD --> ROUTERS
+    ROUTERS --> IDEMP
+    ROUTERS --> CONC
+    CONC --> ORM
+    ORM -->|Connection Pool / SSL| PG
+    PG --> TABLES
+    PG --> INDEXES
+    PG --> LOCKS

@@ -1,0 +1,5 @@
+import { Navigate } from 'react-router-dom';
+
+export function FlashSaleDetailPage() {
+  return <Navigate to="/flash-sales" replace />;
+}

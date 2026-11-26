@@ -1,0 +1,95 @@
+{
+  "acid_properties": {
+    "atomicity": {
+      "mechanism": "PostgreSQL transaction blocks via SQLAlchemy session.commit() / session.rollback() and explicit BEGIN / COMMIT blocks in schema DDL",
+      "verification_evidence": "Stage 3 Concurrency Scenario B & Error Handling Tests: when duplicate key violation or constraint failure occurs, db.rollback() rolls back the entire attempt, leaving zero partial state in database. Validated by conftest.py clean_test_database fixture.",
+      "verdict": "VERIFIED"
+    },
+    "consistency": {
+      "mechanism": "130 database constraints: NOT NULL, CHECK constraints (e.g. quantity >= 0, reserved_quantity <= quantity, sold_quantity <= stock_limit, starts_at < ends_at), FOREIGN KEY cascades and RESTRICT rules, UNIQUE indexes",
+      "verification_evidence": "Scenario A demonstrated that sold_quantity could never exceed stock_limit (10/10 sold, 40 rejected with 409). Negative inventory is mathematically and relationally impossible.",
+      "verdict": "VERIFIED"
+    },
+    "isolation": {
+      "mechanism": "Engine default: READ COMMITTED. High-contention purchase transactions explicitly acquire row-level exclusive locks: SELECT ... FOR UPDATE on flash_sale_products and simulation_inventory, serialized by PostgreSQL tuple lock manager.",
+      "verification_evidence": "Stage 3 Scenario A (50 threads) and Scenario E (30 threads) executed without dirty reads, lost updates, or serialization anomalies. Did not require global SERIALIZABLE isolation aborts.",
+      "verdict": "VERIFIED"
+    },
+    "durability": {
+      "mechanism": "PostgreSQL Write-Ahead Logging (WAL) and synchronous commit. Cloud persistence via Render Managed PostgreSQL disk volume.",
+      "verification_evidence": "Stage 3 Disaster Recovery Drill: backup acquisition (0.266s) and restoration (0.225s) into flashcore_recovery_test confirmed 100% data parity across stores, users, and simulation_runs.",
+      "verdict": "VERIFIED"
+    }
+  },
+  "concurrency_scenarios": [
+    {
+      "scenario": "Scenario A: Overselling Prevention",
+      "threads": 50,
+      "total_requests": 50,
+      "initial_stock": 10,
+      "successful": 10,
+      "rejected": 40,
+      "final_stock": 0,
+      "oversold": 0,
+      "deadlocks": 0,
+      "verdict": "PASS"
+    },
+    {
+      "scenario": "Scenario B: Duplicate Idempotency Contention",
+      "threads": 20,
+      "total_requests": 20,
+      "initial_stock": 10,
+      "successful": 1,
+      "duplicate_replays": 19,
+      "final_stock": 9,
+      "oversold": 0,
+      "deadlocks": 0,
+      "verdict": "PASS"
+    },
+    {
+      "scenario": "Scenario C: Atomic Stock Adjustments",
+      "threads": 20,
+      "total_requests": 20,
+      "initial_stock": 50,
+      "successful": 20,
+      "rejected": 0,
+      "final_stock": 30,
+      "lost_updates": 0,
+      "deadlocks": 0,
+      "verdict": "PASS"
+    },
+    {
+      "scenario": "Scenario D: Customer Single-Purchase Rule",
+      "threads": 10,
+      "total_requests": 10,
+      "initial_stock": 10,
+      "successful": 1,
+      "rejected": 9,
+      "final_stock": 9,
+      "oversold": 0,
+      "deadlocks": 0,
+      "verdict": "PASS"
+    },
+    {
+      "scenario": "Scenario E: Multi-Resource Contention",
+      "threads": 30,
+      "total_requests": 30,
+      "initial_stock": 30,
+      "successful": 30,
+      "rejected": 0,
+      "final_stock": 0,
+      "oversold": 0,
+      "deadlocks": 0,
+      "verdict": "PASS"
+    }
+  ],
+  "load_benchmark_summary": {
+    "tiers_tested": [10, 20, 50],
+    "total_requests": 700,
+    "peak_read_rps": 283.5,
+    "peak_write_rps": 103.9,
+    "p50_latency_ms": 439.0,
+    "p95_latency_ms": 512.4,
+    "oversold_anomalies": 0
+  }
+}

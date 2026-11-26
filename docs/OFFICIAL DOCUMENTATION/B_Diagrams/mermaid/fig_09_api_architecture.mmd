@@ -1,0 +1,19 @@
+graph TD
+    REQ[HTTP Request]
+    CORS[CORS Middleware - Origins Whitelist]
+    LOG[Structured Logger & Correlation ID]
+    AUTH[JWT Verification & Role Extractor]
+    VAL[Pydantic v2 Request Validation]
+    ROUTER[Domain Route Handler]
+    SVC[Business Service Logic]
+    DB_TX[SQLAlchemy Async Transaction]
+    RESP[JSON Response Envelope]
+
+    REQ --> CORS
+    CORS --> LOG
+    LOG --> AUTH
+    AUTH --> VAL
+    VAL --> ROUTER
+    ROUTER --> SVC
+    SVC --> DB_TX
+    DB_TX --> RESP

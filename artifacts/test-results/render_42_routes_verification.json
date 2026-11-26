@@ -1,0 +1,157 @@
+{
+  "health": {
+    "status": 200,
+    "headers": {
+      "Date": "Tue, 24 Nov 2026 13:56:23 GMT",
+      "Content-Type": "application/json",
+      "Transfer-Encoding": "chunked",
+      "Connection": "close",
+      "rndr-id": "bd9e1c7d-f283-44c7",
+      "Server": "cloudflare",
+      "vary": "Origin",
+      "x-render-origin-server": "uvicorn",
+      "cf-cache-status": "DYNAMIC",
+      "CF-RAY": "a5f8eaaf89de38b4-DEL",
+      "alt-svc": "h3=\":443\"; ma=86400"
+    },
+    "body": "{\"status\":\"healthy\"}"
+  },
+  "database_health": {
+    "status": 200,
+    "headers": {
+      "Date": "Tue, 24 Nov 2026 13:56:24 GMT",
+      "Content-Type": "application/json",
+      "Transfer-Encoding": "chunked",
+      "Connection": "close",
+      "rndr-id": "90b976bb-e9a0-4ef5",
+      "Server": "cloudflare",
+      "vary": "Origin",
+      "x-render-origin-server": "uvicorn",
+      "cf-cache-status": "DYNAMIC",
+      "CF-RAY": "a5f8eab03f9b23e2-DEL",
+      "alt-svc": "h3=\":443\"; ma=86400"
+    },
+    "body": "{\"database\":\"flashcore_postgres_temp\",\"status\":\"connected\"}"
+  },
+  "openapi_path_count": 42,
+  "all_registered_paths": [
+    "/",
+    "/api/admin/audit-logs",
+    "/api/admin/users",
+    "/api/admin/users/{user_id}/role",
+    "/api/admin/users/{user_id}/status",
+    "/api/auth/login",
+    "/api/auth/logout",
+    "/api/auth/me",
+    "/api/auth/signup",
+    "/api/health",
+    "/api/health/database",
+    "/api/imports",
+    "/api/imports/{import_id}",
+    "/api/rossmann/sales",
+    "/api/rossmann/sales/customers-trend",
+    "/api/rossmann/sales/promotion-analysis",
+    "/api/rossmann/sales/summary",
+    "/api/rossmann/sales/trend",
+    "/api/rossmann/stores",
+    "/api/rossmann/stores/{store_id}",
+    "/api/simulations/analytics/activity",
+    "/api/simulations/analytics/conversion",
+    "/api/simulations/analytics/failure-rates",
+    "/api/simulations/analytics/flash-sale-performance",
+    "/api/simulations/analytics/flash-sales-overview",
+    "/api/simulations/analytics/inventory-allocation",
+    "/api/simulations/analytics/inventory-utilisation",
+    "/api/simulations/analytics/purchase-outcomes",
+    "/api/simulations/flash-sale-products/{sale_product_id}/purchase",
+    "/api/simulations/flash-sales/{sale_id}/activate",
+    "/api/simulations/flash-sales/{sale_id}/products",
+    "/api/simulations/inventory",
+    "/api/simulations/inventory/{inventory_id}/adjust",
+    "/api/simulations/products",
+    "/api/simulations/runs",
+    "/api/simulations/runs/{run_id}/flash-sales",
+    "/api/simulations/runs/{run_id}/summary",
+    "/api/simulations/strategies",
+    "/api/simulations/transactions",
+    "/api/simulations/transactions/{attempt_id}",
+    "/health",
+    "/health/database"
+  ],
+  "ten_routes_verified": [
+    {
+      "label": "1. Audit Logs",
+      "method": "GET",
+      "path": "/api/admin/audit-logs",
+      "status": 401,
+      "body": "{\"detail\":\"Invalid or expired authentication credentials.\"}"
+    },
+    {
+      "label": "2. Strategies",
+      "method": "GET",
+      "path": "/api/simulations/strategies",
+      "status": 200,
+      "body": "{\"items\":[{\"id\":\"atomic_update\",\"label\":\"Atomic Update (Optimistic)\"},{\"id\":\"select_for_update\",\"label\":\"Select for Update (Pessimistic)\"}]}"
+    },
+    {
+      "label": "3. Purchase Outcomes",
+      "method": "GET",
+      "path": "/api/simulations/analytics/purchase-outcomes",
+      "status": 401,
+      "body": "{\"detail\":\"Invalid or expired authentication credentials.\"}"
+    },
+    {
+      "label": "4. Inventory Allocation",
+      "method": "GET",
+      "path": "/api/simulations/analytics/inventory-allocation",
+      "status": 401,
+      "body": "{\"detail\":\"Invalid or expired authentication credentials.\"}"
+    },
+    {
+      "label": "5. Flash Sales Overview",
+      "method": "GET",
+      "path": "/api/simulations/analytics/flash-sales-overview",
+      "status": 401,
+      "body": "{\"detail\":\"Invalid or expired authentication credentials.\"}"
+    },
+    {
+      "label": "6. Analytics Activity",
+      "method": "GET",
+      "path": "/api/simulations/analytics/activity",
+      "status": 401,
+      "body": "{\"detail\":\"Invalid or expired authentication credentials.\"}"
+    },
+    {
+      "label": "7. Imports List",
+      "method": "GET",
+      "path": "/api/imports",
+      "status": 401,
+      "body": "{\"detail\":\"Invalid or expired authentication credentials.\"}"
+    },
+    {
+      "label": "8. Import Detail",
+      "method": "GET",
+      "path": "/api/imports/1",
+      "status": 401,
+      "body": "{\"detail\":\"Invalid or expired authentication credentials.\"}"
+    },
+    {
+      "label": "9. API System Health",
+      "method": "GET",
+      "path": "/api/health",
+      "status": 200,
+      "body": "{\"status\":\"healthy\",\"version\":\"1.0.0\",\"database\":\"flashcore_postgres_temp\",\"services\":[{\"name\":\"FastAPI Application\",\"status\":\"healthy\",\"detail\":\"Operational (v1.0.0)\"},{\"name\":\"PostgreSQL Database\",\"status\":\"healthy\",\"detail\":\"Connected to flashcore"
+    },
+    {
+      "label": "10. API DB Health",
+      "method": "GET",
+      "path": "/api/health/database",
+      "status": 200,
+      "body": "{\"database\":\"flashcore_postgres_temp\",\"status\":\"connected\"}"
+    }
+  ],
+  "cors": {
+    "status": 200,
+    "allow_origin": "https://flashcore-psi.vercel.app"
+  }
+}

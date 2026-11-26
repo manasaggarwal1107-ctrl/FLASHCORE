@@ -1,0 +1,119 @@
+erDiagram
+    USERS ||--o{ AUDIT_LOGS : generates
+    USERS {
+        int id PK
+        string email UK
+        string hashed_password
+        string role
+        string status
+        timestamp created_at
+    }
+
+    CUSTOMERS ||--o{ ORDERS : places
+    CUSTOMERS {
+        int id PK
+        string email UK
+        string full_name
+        timestamp created_at
+    }
+
+    PRODUCTS ||--|| INVENTORY : has
+    PRODUCTS ||--o{ FLASH_SALE_PRODUCTS : included_in
+    PRODUCTS ||--o{ ORDER_ITEMS : contains
+    PRODUCTS ||--o{ INVENTORY_TRANSACTIONS : logs
+    PRODUCTS {
+        int id PK
+        string sku UK
+        string title
+        decimal base_price
+        string status
+    }
+
+    INVENTORY {
+        int id PK
+        int product_id FK,UK
+        int current_stock
+        int reserved_stock
+        int safety_stock
+        timestamp updated_at
+    }
+
+    FLASH_SALES ||--o{ FLASH_SALE_PRODUCTS : defines
+    FLASH_SALES {
+        int id PK
+        string title
+        timestamp start_time
+        timestamp end_time
+        string status
+    }
+
+    FLASH_SALE_PRODUCTS {
+        int id PK
+        int flash_sale_id FK
+        int product_id FK
+        decimal discount_price
+        int allocated_quantity
+        int sold_quantity
+    }
+
+    ORDERS ||--o{ ORDER_ITEMS : items
+    ORDERS {
+        int id PK
+        int customer_id FK
+        decimal total_amount
+        string status
+        string idempotency_key UK
+        timestamp created_at
+    }
+
+    ORDER_ITEMS {
+        int id PK
+        int order_id FK
+        int product_id FK
+        int quantity
+        decimal unit_price
+    }
+
+    INVENTORY_TRANSACTIONS {
+        int id PK
+        int product_id FK
+        int change_quantity
+        string transaction_type
+        int balance_after
+        timestamp created_at
+    }
+
+    STORES ||--o{ DAILY_STORE_SALES : records
+    STORES {
+        int store_id PK
+        string store_type
+        string assortment
+        int competition_distance
+    }
+
+    DAILY_STORE_SALES {
+        int id PK
+        int store_id FK
+        date sale_date
+        int sales
+        int customers
+        boolean open_status
+        boolean promo
+    }
+
+    DATA_IMPORTS {
+        int id PK
+        string filename
+        int total_rows
+        int success_rows
+        string status
+        timestamp created_at
+    }
+
+    SYSTEM_HEALTH {
+        int id PK
+        string service_name
+        string status
+        decimal latency_ms
+        timestamp checked_at
+    }

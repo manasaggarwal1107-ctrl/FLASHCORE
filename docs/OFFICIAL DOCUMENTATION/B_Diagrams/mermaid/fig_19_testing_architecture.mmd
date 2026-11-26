@@ -1,0 +1,22 @@
+graph TD
+    subgraph Test_Harness [Comprehensive Test Harness]
+        UNIT_PY[144 Backend Pytest Tests - Unit & Route Integration]
+        UNIT_JS[124 Frontend Vitest Tests - Components & Auth Guards]
+        CONC_TEST[Multi-Threaded Concurrency Benchmark Harness]
+        RBAC_TEST[Rigorous RBAC Authorization Matrix Test]
+        HEADLESS[Headless Browser E2E UI Capture]
+    end
+
+    subgraph Verification_Target [System Components Under Test]
+        T_API[FastAPI Routers & Controllers]
+        T_DB[PostgreSQL Relational Schema & Constraints]
+        T_UI[React SPA Interface & Theme State]
+        T_CONC[Row-Level Locks & Zero-Oversell Invariants]
+    end
+
+    UNIT_PY --> T_API
+    UNIT_PY --> T_DB
+    UNIT_JS --> T_UI
+    CONC_TEST --> T_CONC
+    RBAC_TEST --> T_API
+    HEADLESS --> T_UI

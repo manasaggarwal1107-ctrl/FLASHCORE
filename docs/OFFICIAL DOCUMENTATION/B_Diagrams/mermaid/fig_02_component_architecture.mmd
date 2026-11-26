@@ -1,0 +1,29 @@
+graph LR
+    subgraph Frontend_Modules [Frontend Feature Modules]
+        P_AUTH[Auth / Login]
+        P_OVERVIEW[Overview Dashboard]
+        P_PROD[Product Catalog]
+        P_INV[Inventory Control]
+        P_FLASH[Flash Sale Manager]
+        P_CONC[Concurrency Lab]
+        P_AUDIT[Audit Logs]
+    end
+
+    subgraph API_Services [Client API Service Layer]
+        CLIENT[HTTP API Client]
+        STORE[Auth & Token Store]
+    end
+
+    subgraph Backend_Routers [FastAPI Routers]
+        R_AUTH[routes/auth.py]
+        R_COMM[routes/commerce.py]
+        R_FLASH[routes/flash_sales.py]
+        R_SIM[routes/simulation.py]
+        R_ROSS[routes/rossmann.py]
+        R_IMP[routes/imports.py]
+        R_ADM[routes/admin.py]
+    end
+
+    Frontend_Modules --> CLIENT
+    CLIENT --> STORE
+    CLIENT --> Backend_Routers

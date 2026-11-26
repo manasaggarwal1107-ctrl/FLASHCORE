@@ -1,0 +1,77 @@
+﻿# ==========================================
+# FLASHCORE - ROOT GITIGNORE
+# ==========================================
+
+# Environment files and secrets
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+
+# Python environments
+.venv/
+venv/
+env/
+**/.venv/
+**/venv/
+
+# Python cache and test artifacts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Frontend dependencies and build output
+node_modules/
+**/node_modules/
+frontend/dist/
+frontend/coverage/
+frontend/.vite/
+
+# Vercel local configuration
+.vercel/
+**/.vercel/
+
+# Local datasets
+/data/
+
+# Database backups, workspace snapshots, and dumps
+*.backup
+*.backup-*
+*.dump
+*.bak
+*.bak-*
+*.sql.gz
+artifacts/flashcore_test_backup.sql
+artifacts/backups/
+artifacts.zip
+BATCH2_INSPECTION.txt
+COMBINED_BATCH_2_3_SOURCE.txt
+_backup_dashboard_theme_*/
+FLASHCORE-INVENTORY-BACKUP-*/
+frontend/_backup_dashboard_fix_*/
+frontend/flashcore-fix-backup-*/
+
+# Coverage and TypeScript incremental build artifacts
+coverage/
+**/coverage/
+*.tsbuildinfo
+
+# Logs and temporary files
+*.log
+logs/
+tmp/
+temp/
+
+# Operating system files
+.DS_Store
+Thumbs.db
+
+# IDE configuration
+.vscode/
+.idea/

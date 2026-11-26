@@ -1,0 +1,29 @@
+graph TD
+    USER((User / Client))
+    DB[(PostgreSQL Database)]
+
+    P1[1.0 Authentication & RBAC]
+    P2[2.0 Product & Inventory Management]
+    P3[3.0 Flash Sale Scheduling & Simulation]
+    P4[4.0 Transaction Processing & Order Ledger]
+    P5[5.0 Retail Analytics & Reporting]
+    P6[6.0 Audit Logging & System Diagnostics]
+
+    USER -->|Credentials| P1
+    P1 -->|JWT Token| USER
+    P1 <-->|User Records| DB
+
+    USER -->|Inventory Actions| P2
+    P2 <-->|Stock & Product Records| DB
+
+    USER -->|Flash Sale Config & Run| P3
+    P3 <-->|Sale Quotas & Events| DB
+
+    USER -->|Purchase Requests| P4
+    P4 <-->|Orders, Items, Stock Locks| DB
+
+    USER -->|Analytical Queries| P5
+    P5 <-->|Store Sales Records| DB
+
+    P1 & P2 & P3 & P4 -->|Event Streams| P6
+    P6 -->|Write Immutable Logs| DB

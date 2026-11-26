@@ -1,0 +1,9 @@
+stateDiagram-v2
+    [*] --> InStock: Initial Stock Import / Restock
+    InStock --> UnderLock: SELECT FOR UPDATE Acquired
+    UnderLock --> InStock: Rollback / Invariant Failure
+    UnderLock --> Decremented: Atomic Decrement (stock >= qty)
+    Decremented --> Committed: Transaction COMMIT
+    Committed --> InStock: Subsequent Purchases Available
+    Committed --> Depleted: Stock reaches 0
+    Depleted --> InStock: Restock Adjustment Added

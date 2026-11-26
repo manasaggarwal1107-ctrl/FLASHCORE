@@ -1,0 +1,19 @@
+sequenceDiagram
+    autonumber
+    actor Customer
+    participant API as Commerce Router
+    participant Lock as PostgreSQL Lock Manager
+    participant Ledger as Order Ledger
+
+    Customer->>API: POST /api/orders {product_id, qty, customer_id}
+    API->>Lock: BEGIN TX + SELECT stock FOR UPDATE
+    alt Stock Available
+        API->>Lock: UPDATE inventory SET stock = stock - qty
+        API->>Ledger: INSERT INTO orders (status=CONFIRMED)
+        API->>Ledger: INSERT INTO inventory_transactions (-qty)
+        API->>Lock: COMMIT
+        API-->>Customer: HTTP 201 Created (Order Receipt)
+    else Out of Stock
+        API->>Lock: ROLLBACK
+        API-->>Customer: HTTP 409 Conflict (Stock Exhausted)
+    end

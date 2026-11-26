@@ -1,0 +1,28 @@
+graph TD
+    subgraph Roles [System Roles]
+        ADMIN[Admin Role]
+        ANALYST[Analyst Role]
+        OPERATOR[Operator Role]
+    end
+
+    subgraph Domains [Domain Capabilities]
+        D_USER[User & System Config]
+        D_SIM[Simulation Engine]
+        D_ROSS[Rossmann Analytics]
+        D_INV[Inventory Management]
+        D_ORDER[Order Placement]
+        D_AUDIT[Audit Log Inspection]
+    end
+
+    ADMIN --> D_USER
+    ADMIN --> D_SIM
+    ADMIN --> D_ROSS
+    ADMIN --> D_INV
+    ADMIN --> D_ORDER
+    ADMIN --> D_AUDIT
+
+    ANALYST --> D_ROSS
+    ANALYST --> D_SIM
+
+    OPERATOR --> D_INV
+    OPERATOR --> D_ORDER
