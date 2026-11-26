@@ -322,3 +322,211 @@ export interface PromotionAnalysis {
   origin: DataOrigin | null;
   comparisonBasis: string;
 }
+
+export interface CommerceInventorySummary {
+  onHand: number;
+  reserved: number;
+  sold: number;
+  available: number;
+  lowStockThreshold: number | null;
+}
+
+export interface CommerceProduct {
+  id: string;
+  organisationId: number;
+  sku: string;
+  name: string;
+  description: string | null;
+  category: string | null;
+  status: string;
+  priceMinor: number;
+  price: DecimalString;
+  currency: string;
+  taxRateBps: number;
+  metadata: Record<string, unknown> | null;
+  inventory: CommerceInventorySummary;
+  origin: DataOrigin;
+  source: string;
+  createdAt: IsoTimestamp;
+  updatedAt: IsoTimestamp;
+}
+
+export interface InventoryLocation {
+  id: number;
+  organisationId: number;
+  code: string;
+  name: string;
+  locationType: string;
+  isActive: boolean;
+  createdAt: IsoTimestamp;
+  updatedAt: IsoTimestamp;
+}
+
+export interface RetailInventoryBalance {
+  id: number;
+  productId: string;
+  sku: string;
+  productName: string;
+  locationId: number;
+  locationCode: string;
+  locationName: string;
+  onHand: number;
+  reserved: number;
+  available: number;
+  lowStockThreshold: number;
+  origin: DataOrigin;
+  updatedAt: IsoTimestamp;
+}
+
+export interface RetailInventoryMovement {
+  id: string;
+  balanceId: number;
+  productId: string;
+  sku: string;
+  productName: string;
+  locationId: number;
+  locationName: string;
+  type: string;
+  quantityDelta: number;
+  reservedDelta: number;
+  balanceAfter: number;
+  reservedAfter: number;
+  referenceType: string | null;
+  referenceId: string | null;
+  reason: string | null;
+  actor: string | null;
+  origin: DataOrigin;
+  occurredAt: IsoTimestamp;
+}
+
+export interface CommerceCustomer {
+  id: string;
+  organisationId: number;
+  reference: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  billingAddress: Record<string, unknown> | null;
+  shippingAddress: Record<string, unknown> | null;
+  status: string;
+  orderCount: number;
+  origin: DataOrigin;
+  createdAt: IsoTimestamp;
+  updatedAt: IsoTimestamp;
+}
+
+export interface CommerceOrderLine {
+  id: number;
+  productId: string;
+  locationId: number;
+  sku: string;
+  productName: string;
+  quantity: number;
+  unitPriceMinor: number;
+  unitPrice: DecimalString;
+  taxRateBps: number;
+  taxMinor: number;
+  lineTotalMinor: number;
+  lineTotal: DecimalString;
+}
+
+export interface CommerceOrderEvent {
+  id: number;
+  fromStatus: string | null;
+  toStatus: string;
+  eventType: string;
+  actorRef: string | null;
+  details: Record<string, unknown> | null;
+  createdAt: IsoTimestamp;
+}
+
+export interface CommerceOrder {
+  id: string;
+  organisationId: number;
+  reference: string;
+  customerId: number | null;
+  customerRef: string | null;
+  customerName: string | null;
+  currency: string;
+  subtotalMinor: number;
+  subtotal: DecimalString;
+  discountMinor: number;
+  discount: DecimalString;
+  taxMinor: number;
+  tax: DecimalString;
+  totalMinor: number;
+  total: DecimalString;
+  status: string;
+  paymentStatus: string;
+  itemCount: number;
+  lines: CommerceOrderLine[];
+  events: CommerceOrderEvent[] | null;
+  reservationExpiresAt: IsoTimestamp | null;
+  transactionRef: string | null;
+  origin: DataOrigin;
+  placedAt: IsoTimestamp;
+  createdAt: IsoTimestamp;
+  updatedAt: IsoTimestamp;
+}
+
+export interface GatewayAccount {
+  id: number;
+  organisationId: number;
+  provider: string;
+  mode: string;
+  keyId: string;
+  status: string;
+  hasKeySecret: boolean;
+  hasWebhookSecret: boolean;
+  createdAt: IsoTimestamp;
+  updatedAt: IsoTimestamp;
+}
+
+export interface PaymentOrder {
+  id: string;
+  organisationId: number;
+  orderId: string;
+  provider: string;
+  mode: string;
+  providerOrderId: string;
+  keyId: string;
+  amountMinor: number;
+  amount: DecimalString;
+  currency: string;
+  receipt: string;
+  status: string;
+  prefill: Record<string, string | null> | null;
+  createdAt: IsoTimestamp;
+  updatedAt: IsoTimestamp;
+}
+
+export interface PaymentVerificationResult {
+  verified: boolean;
+  paymentOrderId: string;
+  orderId: string;
+  orderStatus: string;
+  paymentStatus: string;
+  providerOrderId: string;
+  providerPaymentId: string;
+  amountMinor: number;
+  amount: DecimalString;
+  currency: string;
+  idempotentReplay: boolean;
+}
+
+export interface PaymentTransaction {
+  id: string;
+  organisationId: number;
+  orderId: string;
+  paymentOrderId: string;
+  provider: string;
+  providerPaymentId: string;
+  eventType: string;
+  amountMinor: number;
+  amount: DecimalString;
+  currency: string;
+  status: string;
+  method: string | null;
+  source: string;
+  createdAt: IsoTimestamp;
+}

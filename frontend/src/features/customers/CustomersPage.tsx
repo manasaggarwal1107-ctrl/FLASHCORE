@@ -1,57 +1,205 @@
-import { Link, useNavigate } from 'react-router-dom';
-import { Info, ShieldCheck } from 'lucide-react';
-import { OriginBadge, StatusBadge } from '@/components/ui/Badge';
-import { PageHeader } from '@/components/ui/PageHeader';
-import { ResourceTable, originFilter } from '@/components/tables/ResourceTable';
-import type { Column } from '@/components/tables/DataTable';
-import { formatDate, formatInteger, formatText } from '@/lib/format';
-import { endpoints } from '@/services/api/endpoints';
-import type { Customer } from '@/types/api';
+import { useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Plus, Search } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
-const columns: Column<Customer>[] = [
-  { id: 'ref', header: 'Customer ref', sortKey: 'reference', cell: (c) => <span className="font-mono text-xs font-medium">{formatText(c.reference ?? c.id)}</span> },
-  { id: 'status', header: 'Account status', cell: (c) => <StatusBadge status={c.status} /> },
-  { id: 'orders', header: 'Orders', align: 'right', sortKey: 'orderCount', cell: (c) => formatInteger(c.orderCount) },
-  { id: 'since', header: 'Customer since', cell: (c) => <span className="text-ink-muted">{formatDate(c.createdAt)}</span>, hideOnMobile: true },
-  { id: 'origin', header: 'Source', cell: (c) => <OriginBadge origin={c.origin} /> },
-];
+import { OriginBadge, StatusBadge } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
+import { FormField, Input } from '@/components/ui/Field';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { Panel, PanelBody, PanelHeader } from '@/components/ui/Panel';
+import { useOptionalAuth } from '@/hooks/useAuth';
+import { formatDateTime, formatInteger } from '@/lib/format';
+import { getActiveOrganisationId } from '@/services/api/auth';
+import { createCustomer, listCustomers } from '@/services/api/commerceApi';
+import { endpoints } from '@/services/api/endpoints';
 
 export function CustomersPage() {
-  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const auth = useOptionalAuth();
+  const orgId = auth?.activeOrganisation?.organisationId ?? getActiveOrganisationId() ?? null;
+  const role = auth?.activeRole ?? 'owner';
+  const canEdit = role === 'owner' || role === 'admin' || role === 'operator';
+
+  const [search, setSearch] = useState('');
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ name: '', email: '', phone: '' });
+  const [formError, setFormError] = useState<string | null>(null);
+
+  const customersQuery = useQuery({
+    queryKey: [endpoints.customers.list.id, orgId, search],
+    queryFn: () => listCustomers({ search: search.trim() || undefined }),
+  });
+
+  const createMutation = useMutation({
+    mutationFn: () =>
+      createCustomer({
+        name: form.name.trim(),
+        email: form.email.trim() || undefined,
+        phone: form.phone.trim() || undefined,
+      }),
+    onSuccess: () => {
+      setForm({ name: '', email: '', phone: '' });
+      setFormError(null);
+      setShowForm(false);
+      void queryClient.invalidateQueries({ queryKey: [endpoints.customers.list.id, orgId] });
+    },
+    onError: (err: Error) => setFormError(err.message || 'Unable to create customer.'),
+  });
+
+  const items = customersQuery.data?.items ?? [];
+
   return (
-    <div>
+    <div className="space-y-4">
       <PageHeader
         title="Customers"
-        description="Customers are identified by reference. Personal details are intentionally not displayed."
-        meta={
-          <span className="inline-flex items-center gap-1 text-xs text-ink-faint">
-            <ShieldCheck className="h-3.5 w-3.5" aria-hidden /> Data minimised
-          </span>
+        description="Tenant-scoped customer directory linked to real retail orders and checkout prefill."
+        actions={
+          canEdit && (
+            <Button
+              variant="primary"
+              icon={<Plus className="h-4 w-4" />}
+              onClick={() => {
+                setFormError(null);
+                setShowForm((prev) => !prev);
+              }}
+            >
+              {showForm ? 'Close form' : 'New customer'}
+            </Button>
+          )
         }
       />
 
-      <div className="mb-4 flex items-start gap-3 rounded-lg border border-line bg-surface-raised p-4 text-xs text-ink-muted">
-        <Info className="mt-0.5 h-4 w-4 shrink-0 text-accent" aria-hidden />
-        <div>
-          <span className="font-semibold text-ink">Entity Architecture Notice: </span>
-          First-class standalone <code className="font-mono text-ink">customers</code> tables do not exist in the relational database model. Customer references exist pseudonymously within purchase attempts. See the{' '}
-          <Link to="/transactions" className="font-medium text-accent hover:underline">
-            Transaction Monitor
-          </Link>{' '}
-          for customer reference activity.
-        </div>
-      </div>
+      {showForm && canEdit && (
+        <Panel>
+          <PanelHeader title="Add customer" />
+          <PanelBody>
+            <form
+              className="grid gap-3 md:grid-cols-3"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!form.name.trim()) {
+                  setFormError('Customer name is required.');
+                  return;
+                }
+                createMutation.mutate();
+              }}
+            >
+              <FormField label="Full name">
+                {(p) => (
+                  <Input
+                    {...p}
+                    placeholder="Aarav Sharma"
+                    value={form.name}
+                    onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                  />
+                )}
+              </FormField>
+              <FormField label="Email">
+                {(p) => (
+                  <Input
+                    {...p}
+                    type="email"
+                    placeholder="aarav@example.com"
+                    value={form.email}
+                    onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                  />
+                )}
+              </FormField>
+              <FormField label="Phone">
+                {(p) => (
+                  <Input
+                    {...p}
+                    placeholder="+919876543210"
+                    value={form.phone}
+                    onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+                  />
+                )}
+              </FormField>
+              {formError && (
+                <div role="alert" className="md:col-span-3 rounded border border-danger/40 bg-danger/10 px-3 py-2 text-xs text-danger">
+                  {formError}
+                </div>
+              )}
+              <div className="md:col-span-3 flex justify-end gap-2">
+                <Button type="button" variant="secondary" onClick={() => setShowForm(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" variant="primary" loading={createMutation.isPending}>
+                  Create customer
+                </Button>
+              </div>
+            </form>
+          </PanelBody>
+        </Panel>
+      )}
 
-      <ResourceTable<Customer>
-        endpoint={endpoints.customers.list}
-        caption="Customers"
-        searchPlaceholder="Search customer reference"
-        columns={columns}
-        rowKey={(c) => c.id}
-        onRowClick={(c) => navigate(`/customers/${encodeURIComponent(c.id)}`)}
-        filters={[{ key: 'status', label: 'Account status', type: 'text' }, originFilter]}
-        emptyTitle="No customers"
-      />
+      <Panel>
+        <PanelBody>
+          <div className="mb-4 flex items-center gap-2 rounded border border-line-strong bg-canvas px-3 h-9 max-w-md">
+            <Search className="h-4 w-4 text-ink-muted" aria-hidden />
+            <input
+              type="search"
+              aria-label="Search customers"
+              placeholder="Search by name, email or reference..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full bg-transparent text-sm text-ink placeholder:text-ink-faint focus:outline-none"
+            />
+          </div>
+
+          {customersQuery.isLoading ? (
+            <p className="text-sm text-ink-muted">Loading customers...</p>
+          ) : customersQuery.isError ? (
+            <div role="alert" className="rounded border border-danger/40 bg-danger/10 p-3 text-sm text-danger">
+              {(customersQuery.error as Error)?.message || 'Failed to load customers.'}
+            </div>
+          ) : items.length === 0 ? (
+            <p className="py-8 text-center text-sm text-ink-muted">
+              No customers in this workspace yet.
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-line text-xs uppercase text-ink-muted">
+                    <th className="py-2 pr-4">Customer</th>
+                    <th className="py-2 pr-4">Reference</th>
+                    <th className="py-2 pr-4">Contact</th>
+                    <th className="py-2 pr-4">Orders</th>
+                    <th className="py-2 pr-4">Status</th>
+                    <th className="py-2 pr-4">Created</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line">
+                  {items.map((c) => (
+                    <tr key={c.id} className="hover:bg-surface-raised/60">
+                      <td className="py-3 pr-4">
+                        <Link to={`/customers/${c.id}`} className="font-medium text-accent hover:underline">
+                          {c.name}
+                        </Link>
+                        <div className="mt-0.5">
+                          <OriginBadge origin={c.origin} />
+                        </div>
+                      </td>
+                      <td className="py-3 pr-4 font-mono text-xs text-ink-muted">{c.reference}</td>
+                      <td className="py-3 pr-4 text-xs text-ink-muted">
+                        <div>{c.email ?? '—'}</div>
+                        <div>{c.phone ?? '—'}</div>
+                      </td>
+                      <td className="py-3 pr-4 font-mono text-ink">{formatInteger(c.orderCount)}</td>
+                      <td className="py-3 pr-4">
+                        <StatusBadge status={c.status} />
+                      </td>
+                      <td className="py-3 pr-4 text-xs text-ink-muted">{formatDateTime(c.createdAt)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </PanelBody>
+      </Panel>
     </div>
   );
 }
