@@ -20,6 +20,13 @@ def role_headers(client, db_session, email, role):
         text("UPDATE users SET role = :role WHERE email = :email"),
         {"role": role, "email": email},
     )
+    db_session.execute(
+        text(
+            "UPDATE organisation_memberships SET role = :role "
+            "WHERE user_id = (SELECT id FROM users WHERE email = :email)"
+        ),
+        {"role": role, "email": email},
+    )
     db_session.commit()
 
     return {"Authorization": f"Bearer {token}"}

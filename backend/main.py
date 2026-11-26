@@ -3,12 +3,14 @@ import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
-from app.core.database import DATABASE_URL, engine
+from app.core.database import engine
 from app.routes.admin import router as admin_router
 from app.routes.auth import router as auth_router
 from app.routes.imports import router as imports_router
+from app.routes.organisations import router as organisations_router
 from app.routes.rossmann import router as rossmann_router
 from app.routes.simulation import router as simulation_router
 
@@ -36,10 +38,17 @@ app.add_middleware(
     allow_origins=allowed_origins,
     allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "Accept", "Idempotency-Key"],
+    allow_headers=[
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Idempotency-Key",
+        "X-Organisation-Id",
+    ],
 )
 
 app.include_router(auth_router)
+app.include_router(organisations_router)
 app.include_router(admin_router)
 app.include_router(rossmann_router)
 app.include_router(simulation_router)
@@ -50,7 +59,6 @@ app.include_router(imports_router)
 def root():
     return {
         "project": "FLASHCORE",
-        "database": DATABASE_URL.database,
         "status": "running",
     }
 
@@ -62,13 +70,16 @@ def health():
 
 @app.get("/health/database")
 def database_health():
-    with engine.connect() as connection:
-        actual_database = connection.execute(
-            text("SELECT current_database()")
-        ).scalar_one()
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1")).scalar_one()
+    except Exception:
+        return JSONResponse(
+            status_code=503,
+            content={"status": "unavailable"},
+        )
 
     return {
-        "database": actual_database,
         "status": "connected",
     }
 
@@ -76,33 +87,33 @@ def database_health():
 @app.get("/api/health")
 def api_system_health():
     db_status = "connected"
-    db_name = DATABASE_URL.database
     services = [
-        {"name": "FastAPI Application", "status": "healthy", "detail": "Operational (v1.0.0)"},
+        {
+            "name": "FastAPI Application",
+            "status": "healthy",
+            "detail": "Operational (v1.0.0)",
+        },
     ]
     try:
         with engine.connect() as connection:
-            actual_database = connection.execute(
-                text("SELECT current_database()")
-            ).scalar_one()
-            db_name = actual_database
+            connection.execute(text("SELECT 1")).scalar_one()
             services.append({
                 "name": "PostgreSQL Database",
                 "status": "healthy",
-                "detail": f"Connected to {actual_database}",
+                "detail": "Connected",
             })
     except Exception:
         db_status = "unavailable"
         services.append({
             "name": "PostgreSQL Database",
             "status": "unhealthy",
-            "detail": "Database connection error",
+            "detail": "Database unavailable",
         })
 
     return {
         "status": "healthy" if db_status == "connected" else "degraded",
         "version": "1.0.0",
-        "database": db_name,
+        "database": "PostgreSQL" if db_status == "connected" else "Unavailable",
         "services": services,
         "checked_at": datetime.now(timezone.utc).isoformat(),
     }

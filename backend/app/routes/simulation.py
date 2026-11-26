@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 import json
 
@@ -8,7 +8,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.auth_dependencies import require_roles
+from app.core.auth_dependencies import OrgContext, require_org_roles
 from app.core.database import get_db
 
 router = APIRouter(
@@ -40,6 +40,7 @@ class InventoryCreate(BaseModel):
 class InventoryAdjustment(BaseModel):
     quantity_delta: int
     reason: str = Field(min_length=3, max_length=500)
+
 
 class FlashSaleCreate(BaseModel):
     title: str = Field(min_length=1, max_length=200)
@@ -76,8 +77,13 @@ def fetch_one(db: Session, query: str, params: dict):
     return db.execute(text(query), params).mappings().first()
 
 
+def _escape_like(value: str) -> str:
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 def write_audit(
     db: Session,
+    organisation_id: int | None,
     action: str,
     entity_name: str,
     entity_id,
@@ -88,12 +94,13 @@ def write_audit(
     db.execute(
         text("""
             INSERT INTO audit_logs
-                (actor_type, actor_ref, action, entity_name, entity_id, details)
+                (organisation_id, actor_type, actor_ref, action, entity_name, entity_id, details)
             VALUES
-                (:actor_type, :actor_ref, :action, :entity_name,
+                (:organisation_id, :actor_type, :actor_ref, :action, :entity_name,
                  :entity_id, CAST(:details AS JSONB))
         """),
         {
+            "organisation_id": organisation_id,
             "actor_type": actor_type,
             "actor_ref": actor_ref,
             "action": action,
@@ -106,6 +113,7 @@ def write_audit(
 
 def write_transaction(
     db: Session,
+    organisation_id: int,
     run_id: int,
     action: str,
     outcome: dict,
@@ -114,11 +122,12 @@ def write_transaction(
     db.execute(
         text("""
             INSERT INTO transactions_log
-                (simulation_run_id, purchase_attempt_id, action, outcome)
+                (organisation_id, simulation_run_id, purchase_attempt_id, action, outcome)
             VALUES
-                (:run_id, :attempt_id, :action, CAST(:outcome AS JSONB))
+                (:organisation_id, :run_id, :attempt_id, :action, CAST(:outcome AS JSONB))
         """),
         {
+            "organisation_id": organisation_id,
             "run_id": run_id,
             "attempt_id": attempt_id,
             "action": action,
@@ -137,18 +146,24 @@ def require_aware(dt: datetime):
 
 # ---------------- SIMULATION RUNS ----------------
 
-@router.post("/runs", status_code=201, dependencies=[Depends(require_roles('admin', 'operator'))])
-def create_run(payload: RunCreate, db: Session = Depends(get_db)):
+@router.post("/runs", status_code=201)
+def create_run(
+    payload: RunCreate,
+    org_ctx: OrgContext = Depends(require_org_roles("owner", "admin", "operator")),
+    db: Session = Depends(get_db),
+):
+    org_id = org_ctx.organisation.id
     row = fetch_one(
         db,
         """
         INSERT INTO simulation_runs
-            (run_name, description, configuration, status)
+            (organisation_id, run_name, description, configuration, status)
         VALUES
-            (:name, :description, CAST(:configuration AS JSONB), 'created')
+            (:org_id, :name, :description, CAST(:configuration AS JSONB), 'created')
         RETURNING *
         """,
         {
+            "org_id": org_id,
             "name": payload.run_name,
             "description": payload.description,
             "configuration": json.dumps(payload.configuration),
@@ -156,28 +171,51 @@ def create_run(payload: RunCreate, db: Session = Depends(get_db)):
     )
 
     write_audit(
-        db, "simulation_created", "simulation_runs",
-        row["id"], {"run_name": payload.run_name},
+        db,
+        org_id,
+        "simulation_created",
+        "simulation_runs",
+        row["id"],
+        {"run_name": payload.run_name},
+        actor_type=org_ctx.membership.role,
+        actor_ref=org_ctx.user.email,
     )
     commit_or_conflict(db)
     return dict(row)
 
 
-@router.get("/runs", dependencies=[Depends(require_roles('admin', 'analyst', 'operator'))])
-def list_runs(db: Session = Depends(get_db)):
+@router.get("/runs")
+def list_runs(
+    org_ctx: OrgContext = Depends(
+        require_org_roles("owner", "admin", "analyst", "operator")
+    ),
+    db: Session = Depends(get_db),
+):
     rows = db.execute(
-        text("SELECT * FROM simulation_runs ORDER BY created_at DESC")
+        text(
+            "SELECT * FROM simulation_runs "
+            "WHERE organisation_id = :org_id "
+            "ORDER BY created_at DESC"
+        ),
+        {"org_id": org_ctx.organisation.id},
     ).mappings().all()
 
     return [dict(row) for row in rows]
 
 
-@router.get("/runs/{run_id}/summary", dependencies=[Depends(require_roles('admin', 'analyst', 'operator'))])
-def run_summary(run_id: int, db: Session = Depends(get_db)):
+@router.get("/runs/{run_id}/summary")
+def run_summary(
+    run_id: int,
+    org_ctx: OrgContext = Depends(
+        require_org_roles("owner", "admin", "analyst", "operator")
+    ),
+    db: Session = Depends(get_db),
+):
+    org_id = org_ctx.organisation.id
     run = fetch_one(
         db,
-        "SELECT * FROM simulation_runs WHERE id=:id",
-        {"id": run_id},
+        "SELECT * FROM simulation_runs WHERE id = :id AND organisation_id = :org_id",
+        {"id": run_id, "org_id": org_id},
     )
 
     if not run:
@@ -194,9 +232,10 @@ def run_summary(run_id: int, db: Session = Depends(get_db)):
             COALESCE(SUM(quantity) FILTER (WHERE status='success'), 0)
                 AS units_sold
         FROM purchase_attempts
-        WHERE simulation_run_id=:id
+        WHERE simulation_run_id = :id
+          AND organisation_id = :org_id
         """,
-        {"id": run_id},
+        {"id": run_id, "org_id": org_id},
     )
 
     sales = db.execute(
@@ -210,11 +249,13 @@ def run_summary(run_id: int, db: Session = Depends(get_db)):
             FROM flash_sales fs
             LEFT JOIN flash_sale_products fsp
                 ON fsp.flash_sale_id = fs.id
+               AND fsp.organisation_id = :org_id
             WHERE fs.simulation_run_id = :id
+              AND fs.organisation_id = :org_id
             GROUP BY fs.id, fs.title, fs.status
             ORDER BY fs.id
         """),
-        {"id": run_id},
+        {"id": run_id, "org_id": org_id},
     ).mappings().all()
 
     return {
@@ -226,17 +267,23 @@ def run_summary(run_id: int, db: Session = Depends(get_db)):
 
 # ---------------- PRODUCTS ----------------
 
-@router.post("/products", status_code=201, dependencies=[Depends(require_roles('admin', 'operator'))])
-def create_product(payload: ProductCreate, db: Session = Depends(get_db)):
+@router.post("/products", status_code=201)
+def create_product(
+    payload: ProductCreate,
+    org_ctx: OrgContext = Depends(require_org_roles("owner", "admin", "operator")),
+    db: Session = Depends(get_db),
+):
+    org_id = org_ctx.organisation.id
     try:
         row = fetch_one(
             db,
             """
-            INSERT INTO simulation_products (sku, name, description)
-            VALUES (:sku, :name, :description)
+            INSERT INTO simulation_products (organisation_id, sku, name, description)
+            VALUES (:org_id, :sku, :name, :description)
             RETURNING *
             """,
             {
+                "org_id": org_id,
                 "sku": payload.sku,
                 "name": payload.name,
                 "description": payload.description,
@@ -250,16 +297,33 @@ def create_product(payload: ProductCreate, db: Session = Depends(get_db)):
         ) from exc
 
     write_audit(
-        db, "product_created", "simulation_products",
-        row["id"], {"sku": payload.sku, "name": payload.name},
+        db,
+        org_id,
+        "product_created",
+        "simulation_products",
+        row["id"],
+        {"sku": payload.sku, "name": payload.name},
+        actor_type=org_ctx.membership.role,
+        actor_ref=org_ctx.user.email,
     )
     commit_or_conflict(db)
     return dict(row)
 
-@router.get("/products", dependencies=[Depends(require_roles('admin', 'analyst', 'operator'))])
-def list_products(db: Session = Depends(get_db)):
+
+@router.get("/products")
+def list_products(
+    org_ctx: OrgContext = Depends(
+        require_org_roles("owner", "admin", "analyst", "operator")
+    ),
+    db: Session = Depends(get_db),
+):
     rows = db.execute(
-        text("SELECT * FROM simulation_products ORDER BY id")
+        text(
+            "SELECT * FROM simulation_products "
+            "WHERE organisation_id = :org_id "
+            "ORDER BY id"
+        ),
+        {"org_id": org_ctx.organisation.id},
     ).mappings().all()
 
     return [dict(row) for row in rows]
@@ -267,22 +331,39 @@ def list_products(db: Session = Depends(get_db)):
 
 # ---------------- INVENTORY ----------------
 
-@router.post("/inventory", status_code=201, dependencies=[Depends(require_roles('admin', 'operator'))])
+@router.post("/inventory", status_code=201)
 def create_inventory(
     payload: InventoryCreate,
+    org_ctx: OrgContext = Depends(require_org_roles("owner", "admin", "operator")),
     db: Session = Depends(get_db),
 ):
+    org_id = org_ctx.organisation.id
+    product = fetch_one(
+        db,
+        "SELECT id FROM simulation_products WHERE id = :product_id AND organisation_id = :org_id",
+        {"product_id": payload.product_id, "org_id": org_id},
+    )
+    if not product:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Database constraint conflict. Check that the store and "
+                "product exist and inventory is not already registered."
+            ),
+        )
+
     try:
         row = fetch_one(
             db,
             """
             INSERT INTO simulation_inventory
-                (store_id, product_id, quantity, reserved_quantity)
+                (organisation_id, store_id, product_id, quantity, reserved_quantity)
             VALUES
-                (:store_id, :product_id, :quantity, 0)
+                (:org_id, :store_id, :product_id, :quantity, 0)
             RETURNING *
             """,
             {
+                "org_id": org_id,
                 "store_id": payload.store_id,
                 "product_id": payload.product_id,
                 "quantity": payload.quantity,
@@ -299,15 +380,26 @@ def create_inventory(
         ) from exc
 
     write_audit(
-        db, "inventory_created", "simulation_inventory",
-        row["id"], {"quantity": payload.quantity},
+        db,
+        org_id,
+        "inventory_created",
+        "simulation_inventory",
+        row["id"],
+        {"quantity": payload.quantity},
+        actor_type=org_ctx.membership.role,
+        actor_ref=org_ctx.user.email,
     )
     commit_or_conflict(db)
     return dict(row)
 
 
-@router.get("/inventory", dependencies=[Depends(require_roles('admin', 'analyst', 'operator'))])
-def list_inventory(db: Session = Depends(get_db)):
+@router.get("/inventory")
+def list_inventory(
+    org_ctx: OrgContext = Depends(
+        require_org_roles("owner", "admin", "analyst", "operator")
+    ),
+    db: Session = Depends(get_db),
+):
     rows = db.execute(
         text("""
             SELECT
@@ -315,35 +407,38 @@ def list_inventory(db: Session = Depends(get_db)):
                 p.sku,
                 p.name AS product_name
             FROM simulation_inventory i
-            JOIN simulation_products p ON p.id = i.product_id
+            JOIN simulation_products p
+              ON p.id = i.product_id
+             AND p.organisation_id = :org_id
+            WHERE i.organisation_id = :org_id
             ORDER BY i.id
-        """)
+        """),
+        {"org_id": org_ctx.organisation.id},
     ).mappings().all()
 
     return [dict(row) for row in rows]
 
 
-@router.post(
-    "/inventory/{inventory_id}/adjust",
-    dependencies=[Depends(require_roles('admin', 'operator'))],
-)
+@router.post("/inventory/{inventory_id}/adjust")
 def adjust_inventory(
     inventory_id: int,
     payload: InventoryAdjustment,
+    org_ctx: OrgContext = Depends(require_org_roles("owner", "admin", "operator")),
     db: Session = Depends(get_db),
 ):
     if payload.quantity_delta == 0:
         raise HTTPException(422, "Quantity adjustment cannot be zero")
 
+    org_id = org_ctx.organisation.id
     inventory = fetch_one(
         db,
         """
         SELECT *
         FROM simulation_inventory
-        WHERE id = :id
+        WHERE id = :id AND organisation_id = :org_id
         FOR UPDATE
         """,
-        {"id": inventory_id},
+        {"id": inventory_id, "org_id": org_id},
     )
 
     if not inventory:
@@ -370,17 +465,19 @@ def adjust_inventory(
         UPDATE simulation_inventory
         SET quantity = :quantity,
             updated_at = NOW()
-        WHERE id = :id
+        WHERE id = :id AND organisation_id = :org_id
         RETURNING *
         """,
         {
             "quantity": new_quantity,
             "id": inventory_id,
+            "org_id": org_id,
         },
     )
 
     write_audit(
         db,
+        org_id,
         "inventory_adjusted",
         "simulation_inventory",
         inventory_id,
@@ -391,6 +488,8 @@ def adjust_inventory(
             "reserved_quantity": reserved_quantity,
             "reason": payload.reason,
         },
+        actor_type=org_ctx.membership.role,
+        actor_ref=org_ctx.user.email,
     )
 
     commit_or_conflict(db)
@@ -407,12 +506,14 @@ def adjust_inventory(
         "updated_at": updated["updated_at"],
     }
 
+
 # ---------------- FLASH SALES ----------------
 
-@router.post("/runs/{run_id}/flash-sales", status_code=201, dependencies=[Depends(require_roles('admin', 'operator'))])
+@router.post("/runs/{run_id}/flash-sales", status_code=201)
 def create_flash_sale(
     run_id: int,
     payload: FlashSaleCreate,
+    org_ctx: OrgContext = Depends(require_org_roles("owner", "admin", "operator")),
     db: Session = Depends(get_db),
 ):
     require_aware(payload.starts_at)
@@ -421,10 +522,11 @@ def create_flash_sale(
     if payload.ends_at <= payload.starts_at:
         raise HTTPException(422, "ends_at must be after starts_at")
 
+    org_id = org_ctx.organisation.id
     if not fetch_one(
         db,
-        "SELECT id FROM simulation_runs WHERE id=:id",
-        {"id": run_id},
+        "SELECT id FROM simulation_runs WHERE id = :id AND organisation_id = :org_id",
+        {"id": run_id, "org_id": org_id},
     ):
         raise HTTPException(404, "Simulation run not found")
 
@@ -432,12 +534,13 @@ def create_flash_sale(
         db,
         """
         INSERT INTO flash_sales
-            (simulation_run_id, title, starts_at, ends_at, status)
+            (organisation_id, simulation_run_id, title, starts_at, ends_at, status)
         VALUES
-            (:run_id, :title, :starts_at, :ends_at, 'draft')
+            (:org_id, :run_id, :title, :starts_at, :ends_at, 'draft')
         RETURNING *
         """,
         {
+            "org_id": org_id,
             "run_id": run_id,
             "title": payload.title,
             "starts_at": payload.starts_at,
@@ -446,22 +549,30 @@ def create_flash_sale(
     )
 
     write_audit(
-        db, "flash_sale_created", "flash_sales",
-        row["id"], {"title": payload.title},
+        db,
+        org_id,
+        "flash_sale_created",
+        "flash_sales",
+        row["id"],
+        {"title": payload.title},
+        actor_type=org_ctx.membership.role,
+        actor_ref=org_ctx.user.email,
     )
     commit_or_conflict(db)
     return dict(row)
 
 
-@router.post("/flash-sales/{sale_id}/activate", dependencies=[Depends(require_roles('admin', 'operator'))])
+@router.post("/flash-sales/{sale_id}/activate")
 def activate_flash_sale(
     sale_id: int,
+    org_ctx: OrgContext = Depends(require_org_roles("owner", "admin", "operator")),
     db: Session = Depends(get_db),
 ):
+    org_id = org_ctx.organisation.id
     sale = fetch_one(
         db,
-        "SELECT * FROM flash_sales WHERE id=:id FOR UPDATE",
-        {"id": sale_id},
+        "SELECT * FROM flash_sales WHERE id = :id AND organisation_id = :org_id FOR UPDATE",
+        {"id": sale_id, "org_id": org_id},
     )
 
     if not sale:
@@ -475,24 +586,28 @@ def activate_flash_sale(
     if now >= sale["ends_at"]:
         raise HTTPException(409, "Flash sale has already expired")
 
-    new_status = (
-        "scheduled" if now < sale["starts_at"] else "active"
-    )
+    new_status = "scheduled" if now < sale["starts_at"] else "active"
 
     row = fetch_one(
         db,
         """
         UPDATE flash_sales
-        SET status=:status
-        WHERE id=:id
+        SET status = :status
+        WHERE id = :id AND organisation_id = :org_id
         RETURNING *
         """,
-        {"id": sale_id, "status": new_status},
+        {"id": sale_id, "org_id": org_id, "status": new_status},
     )
 
     write_audit(
-        db, "flash_sale_activated", "flash_sales",
-        sale_id, {"status": new_status},
+        db,
+        org_id,
+        "flash_sale_activated",
+        "flash_sales",
+        sale_id,
+        {"status": new_status},
+        actor_type=org_ctx.membership.role,
+        actor_ref=org_ctx.user.email,
     )
     commit_or_conflict(db)
     return dict(row)
@@ -500,16 +615,21 @@ def activate_flash_sale(
 
 # ---------------- STOCK ALLOCATION ----------------
 
-@router.post("/flash-sales/{sale_id}/products", status_code=201, dependencies=[Depends(require_roles('admin', 'operator'))])
+@router.post("/flash-sales/{sale_id}/products", status_code=201)
 def allocate_sale_stock(
     sale_id: int,
     payload: SaleProductCreate,
+    org_ctx: OrgContext = Depends(require_org_roles("owner", "admin", "operator")),
     db: Session = Depends(get_db),
 ):
+    org_id = org_ctx.organisation.id
+    # Lock flash_sales (FOR SHARE) before simulation_inventory (FOR UPDATE) to maintain
+    # canonical lock order (flash_sales -> flash_sale_products -> simulation_inventory)
+    # without blocking concurrent active-sale purchases.
     sale = fetch_one(
         db,
-        "SELECT * FROM flash_sales WHERE id=:id FOR UPDATE",
-        {"id": sale_id},
+        "SELECT * FROM flash_sales WHERE id = :id AND organisation_id = :org_id FOR SHARE",
+        {"id": sale_id, "org_id": org_id},
     )
 
     if not sale:
@@ -520,8 +640,8 @@ def allocate_sale_stock(
 
     inventory = fetch_one(
         db,
-        "SELECT * FROM simulation_inventory WHERE id=:id FOR UPDATE",
-        {"id": payload.inventory_id},
+        "SELECT * FROM simulation_inventory WHERE id = :id AND organisation_id = :org_id FOR UPDATE",
+        {"id": payload.inventory_id, "org_id": org_id},
     )
 
     if not inventory:
@@ -544,21 +664,22 @@ def allocate_sale_stock(
             UPDATE simulation_inventory
             SET reserved_quantity = reserved_quantity + :stock,
                 updated_at = NOW()
-            WHERE id = :id
+            WHERE id = :id AND organisation_id = :org_id
         """),
-        {"stock": payload.stock_limit, "id": payload.inventory_id},
+        {"stock": payload.stock_limit, "id": payload.inventory_id, "org_id": org_id},
     )
 
     row = fetch_one(
         db,
         """
         INSERT INTO flash_sale_products
-            (flash_sale_id, inventory_id, sale_price, stock_limit)
+            (organisation_id, flash_sale_id, inventory_id, sale_price, stock_limit)
         VALUES
-            (:sale_id, :inventory_id, :price, :stock)
+            (:org_id, :sale_id, :inventory_id, :price, :stock)
         RETURNING *
         """,
         {
+            "org_id": org_id,
             "sale_id": sale_id,
             "inventory_id": payload.inventory_id,
             "price": payload.sale_price,
@@ -567,12 +688,17 @@ def allocate_sale_stock(
     )
 
     write_audit(
-        db, "stock_allocated", "flash_sale_products",
+        db,
+        org_id,
+        "stock_allocated",
+        "flash_sale_products",
         row["id"],
         {
             "inventory_id": payload.inventory_id,
             "stock_limit": payload.stock_limit,
         },
+        actor_type=org_ctx.membership.role,
+        actor_ref=org_ctx.user.email,
     )
 
     commit_or_conflict(db)
@@ -581,20 +707,24 @@ def allocate_sale_stock(
 
 # ---------------- TRANSACTIONAL PURCHASE ENGINE ----------------
 
-@router.post("/flash-sale-products/{sale_product_id}/purchase", dependencies=[Depends(require_roles('admin', 'operator'))])
+@router.post("/flash-sale-products/{sale_product_id}/purchase")
 def purchase(
     sale_product_id: int,
     payload: PurchaseCreate,
+    org_ctx: OrgContext = Depends(require_org_roles("owner", "admin", "operator")),
     db: Session = Depends(get_db),
 ):
-    # Fast idempotency check.
+    org_id = org_ctx.organisation.id
+
+    # Fast tenant-scoped idempotency check.
     existing = fetch_one(
         db,
         """
         SELECT * FROM purchase_attempts
-        WHERE idempotency_key=:key
+        WHERE organisation_id = :org_id
+          AND idempotency_key = :key
         """,
-        {"key": payload.idempotency_key},
+        {"org_id": org_id, "key": payload.idempotency_key},
     )
 
     if existing:
@@ -610,48 +740,99 @@ def purchase(
 
         return {"duplicate": True, "attempt": dict(existing)}
 
-    # Lock the sale product: concurrent purchases for this product
-    # must be processed one at a time.
+    # Resolve parent flash_sale_id first (unlocked) so locks are always acquired in
+    # canonical order: flash_sales -> flash_sale_products -> simulation_inventory.
+    sale_product_ref = fetch_one(
+        db,
+        """
+        SELECT flash_sale_id FROM flash_sale_products
+        WHERE id = :id AND organisation_id = :org_id
+        """,
+        {"id": sale_product_id, "org_id": org_id},
+    )
+
+    if not sale_product_ref:
+        raise HTTPException(404, "Flash sale product not found")
+
+    sale_id = sale_product_ref["flash_sale_id"]
+    now = datetime.now(timezone.utc)
+
+    sale_peek = fetch_one(
+        db,
+        "SELECT status, starts_at, ends_at FROM flash_sales WHERE id = :id AND organisation_id = :org_id",
+        {"id": sale_id, "org_id": org_id},
+    )
+    if not sale_peek:
+        raise HTTPException(404, "Flash sale not found")
+
+    needs_activation = (
+        sale_peek["status"] == "scheduled"
+        and sale_peek["starts_at"] <= now < sale_peek["ends_at"]
+    )
+    lock_clause = "FOR UPDATE" if needs_activation else "FOR SHARE"
+
+    sale = fetch_one(
+        db,
+        f"SELECT * FROM flash_sales WHERE id = :id AND organisation_id = :org_id {lock_clause}",
+        {"id": sale_id, "org_id": org_id},
+    )
+    if not sale:
+        raise HTTPException(404, "Flash sale not found")
+
+    now = datetime.now(timezone.utc)
+    if (
+        not needs_activation
+        and sale["status"] == "scheduled"
+        and sale["starts_at"] <= now < sale["ends_at"]
+    ):
+        # Crossed starts_at between peek and FOR SHARE; release shared lock cleanly
+        # before acquiring FOR UPDATE to avoid shared-to-exclusive upgrade deadlocks.
+        db.rollback()
+        sale = fetch_one(
+            db,
+            "SELECT * FROM flash_sales WHERE id = :id AND organisation_id = :org_id FOR UPDATE",
+            {"id": sale_id, "org_id": org_id},
+        )
+        if not sale:
+            raise HTTPException(404, "Flash sale not found")
+        now = datetime.now(timezone.utc)
+
+    # A scheduled sale becomes active automatically once its
+    # scheduled start time is reached (under exclusive flash_sales row lock).
+    sale_status = sale["status"]
+
+    if sale_status == "scheduled" and sale["starts_at"] <= now < sale["ends_at"]:
+        db.execute(
+            text(
+                "UPDATE flash_sales SET status = 'active' "
+                "WHERE id = :id AND organisation_id = :org_id"
+            ),
+            {"id": sale["id"], "org_id": org_id},
+        )
+        sale_status = "active"
+
+    # Now lock the sale product and physical inventory in canonical order.
     sale_product = fetch_one(
         db,
         """
         SELECT * FROM flash_sale_products
-        WHERE id=:id
+        WHERE id = :id AND organisation_id = :org_id
         FOR UPDATE
         """,
-        {"id": sale_product_id},
+        {"id": sale_product_id, "org_id": org_id},
     )
 
     if not sale_product:
         raise HTTPException(404, "Flash sale product not found")
 
-    sale = fetch_one(
-        db,
-        "SELECT * FROM flash_sales WHERE id=:id",
-        {"id": sale_product["flash_sale_id"]},
-    )
-
     inventory = fetch_one(
         db,
-        "SELECT * FROM simulation_inventory WHERE id=:id FOR UPDATE",
-        {"id": sale_product["inventory_id"]},
+        "SELECT * FROM simulation_inventory WHERE id = :id AND organisation_id = :org_id FOR UPDATE",
+        {"id": sale_product["inventory_id"], "org_id": org_id},
     )
 
     if not inventory:
         raise HTTPException(409, "Associated inventory record is missing")
-
-    now = datetime.now(timezone.utc)
-
-    # A scheduled sale becomes active automatically once its
-    # scheduled start time is reached.
-    sale_status = sale["status"]
-
-    if sale_status == "scheduled" and sale["starts_at"] <= now < sale["ends_at"]:
-        db.execute(
-            text("UPDATE flash_sales SET status='active' WHERE id=:id"),
-            {"id": sale["id"]},
-        )
-        sale_status = "active"
 
     failure = None
 
@@ -670,11 +851,13 @@ def purchase(
             db,
             """
             SELECT id FROM purchase_attempts
-            WHERE customer_ref=:customer
-              AND flash_sale_product_id=:product
-              AND status='success'
+            WHERE organisation_id = :org_id
+              AND customer_ref = :customer
+              AND flash_sale_product_id = :product
+              AND status = 'success'
             """,
             {
+                "org_id": org_id,
                 "customer": payload.customer_ref,
                 "product": sale_product_id,
             },
@@ -690,14 +873,15 @@ def purchase(
             db,
             """
             INSERT INTO purchase_attempts
-                (simulation_run_id, flash_sale_product_id, customer_ref,
+                (organisation_id, simulation_run_id, flash_sale_product_id, customer_ref,
                  idempotency_key, quantity, status, failure_reason)
             VALUES
-                (:run_id, :product_id, :customer, :key, :quantity,
+                (:org_id, :run_id, :product_id, :customer, :key, :quantity,
                  :status, :reason)
             RETURNING *
             """,
             {
+                "org_id": org_id,
                 "run_id": sale["simulation_run_id"],
                 "product_id": sale_product_id,
                 "customer": payload.customer_ref,
@@ -711,8 +895,8 @@ def purchase(
         db.rollback()
         existing = fetch_one(
             db,
-            "SELECT * FROM purchase_attempts WHERE idempotency_key=:key",
-            {"key": payload.idempotency_key},
+            "SELECT * FROM purchase_attempts WHERE organisation_id = :org_id AND idempotency_key = :key",
+            {"org_id": org_id, "key": payload.idempotency_key},
         )
         if existing:
             if (
@@ -736,18 +920,18 @@ def purchase(
                 SET quantity = quantity - :quantity,
                     reserved_quantity = reserved_quantity - :quantity,
                     updated_at = NOW()
-                WHERE id = :id
+                WHERE id = :id AND organisation_id = :org_id
             """),
-            {"quantity": payload.quantity, "id": inventory["id"]},
+            {"quantity": payload.quantity, "id": inventory["id"], "org_id": org_id},
         )
 
         db.execute(
             text("""
                 UPDATE flash_sale_products
                 SET sold_quantity = sold_quantity + :quantity
-                WHERE id = :id
+                WHERE id = :id AND organisation_id = :org_id
             """),
-            {"quantity": payload.quantity, "id": sale_product_id},
+            {"quantity": payload.quantity, "id": sale_product_id, "org_id": org_id},
         )
 
     outcome = {
@@ -756,10 +940,12 @@ def purchase(
         "quantity": payload.quantity,
         "status": attempt_status,
         "reason": failure,
+        "initiated_by": org_ctx.user.email,
     }
 
     write_transaction(
         db,
+        org_id,
         sale["simulation_run_id"],
         "purchase_" + attempt_status,
         outcome,
@@ -768,6 +954,7 @@ def purchase(
 
     write_audit(
         db,
+        org_id,
         "purchase_" + attempt_status,
         "purchase_attempts",
         attempt["id"],
@@ -776,18 +963,15 @@ def purchase(
         actor_ref=payload.customer_ref,
     )
 
-    # Commit rejected attempts too, so they remain auditable.
     try:
         db.commit()
     except IntegrityError as exc:
         db.rollback()
 
-        # Another request may have committed the same idempotency key
-        # while this request was waiting for the row lock.
         existing = fetch_one(
             db,
-            "SELECT * FROM purchase_attempts WHERE idempotency_key=:key",
-            {"key": payload.idempotency_key},
+            "SELECT * FROM purchase_attempts WHERE organisation_id = :org_id AND idempotency_key = :key",
+            {"org_id": org_id, "key": payload.idempotency_key},
         )
 
         if existing:
@@ -821,7 +1005,13 @@ def analytics_period(from_date, to_date):
     return from_date, to_date
 
 
-def purchase_analytics_series(db: Session, from_date, to_date, metric: str):
+def purchase_analytics_series(
+    db: Session,
+    org_id: int,
+    from_date,
+    to_date,
+    metric: str,
+):
     numerator = {
         "conversion": "successful",
         "failure": "failed",
@@ -845,7 +1035,8 @@ def purchase_analytics_series(db: Session, from_date, to_date, metric: str):
                         WHERE status = 'failed'
                     ) AS failed
                 FROM purchase_attempts
-                WHERE (CAST(:start AS TIMESTAMPTZ) IS NULL OR created_at >= CAST(:start AS TIMESTAMPTZ))
+                WHERE organisation_id = :org_id
+                  AND (CAST(:start AS TIMESTAMPTZ) IS NULL OR created_at >= CAST(:start AS TIMESTAMPTZ))
                   AND (CAST(:end AS TIMESTAMPTZ) IS NULL OR created_at <= CAST(:end AS TIMESTAMPTZ))
                 GROUP BY created_at::date
             )
@@ -858,7 +1049,7 @@ def purchase_analytics_series(db: Session, from_date, to_date, metric: str):
             FROM daily
             ORDER BY period
         """),
-        {"start": from_date, "end": to_date},
+        {"org_id": org_id, "start": from_date, "end": to_date},
     ).mappings().all()
 
     return {
@@ -872,31 +1063,38 @@ def purchase_analytics_series(db: Session, from_date, to_date, metric: str):
     }
 
 
-@router.get("/analytics/conversion", dependencies=[Depends(require_roles('admin', 'analyst'))])
+@router.get("/analytics/conversion")
 def analytics_conversion(
     from_date: datetime | None = Query(None, alias="from"),
     to_date: datetime | None = Query(None, alias="to"),
+    org_ctx: OrgContext = Depends(require_org_roles("owner", "admin", "analyst")),
     db: Session = Depends(get_db),
 ):
     start, end = analytics_period(from_date, to_date)
-    return purchase_analytics_series(db, start, end, "conversion")
+    return purchase_analytics_series(
+        db, org_ctx.organisation.id, start, end, "conversion"
+    )
 
 
-@router.get("/analytics/failure-rates", dependencies=[Depends(require_roles('admin', 'analyst'))])
+@router.get("/analytics/failure-rates")
 def analytics_failure_rates(
     from_date: datetime | None = Query(None, alias="from"),
     to_date: datetime | None = Query(None, alias="to"),
+    org_ctx: OrgContext = Depends(require_org_roles("owner", "admin", "analyst")),
     db: Session = Depends(get_db),
 ):
     start, end = analytics_period(from_date, to_date)
-    return purchase_analytics_series(db, start, end, "failure")
+    return purchase_analytics_series(
+        db, org_ctx.organisation.id, start, end, "failure"
+    )
 
 
-
-@router.get("/analytics/inventory-utilisation", dependencies=[Depends(require_roles('admin', 'analyst'))])
+@router.get("/analytics/inventory-utilisation")
 def analytics_inventory_utilisation(
+    org_ctx: OrgContext = Depends(require_org_roles("owner", "admin", "analyst")),
     db: Session = Depends(get_db),
 ):
+    org_id = org_ctx.organisation.id
     row = db.execute(
         text("""
             WITH initial_stock AS (
@@ -904,7 +1102,8 @@ def analytics_inventory_utilisation(
                     entity_id::bigint AS inventory_id,
                     (details->>'quantity')::integer AS initial_quantity
                 FROM audit_logs
-                WHERE entity_name = 'simulation_inventory'
+                WHERE organisation_id = :org_id
+                  AND entity_name = 'simulation_inventory'
                   AND action = 'inventory_created'
                 ORDER BY entity_id, created_at ASC
             ),
@@ -918,12 +1117,14 @@ def analytics_inventory_utilisation(
                 FROM simulation_inventory i
                 LEFT JOIN initial_stock s
                     ON s.inventory_id = i.id
+                WHERE i.organisation_id = :org_id
             )
             SELECT
                 *,
                 CURRENT_TIMESTAMP AS snapshot_at
             FROM totals
-        """)
+        """),
+        {"org_id": org_id},
     ).mappings().one()
 
     if row["total_rows"] == 0:
@@ -980,11 +1181,11 @@ def analytics_inventory_utilisation(
     }
 
 
-
-@router.get("/analytics/flash-sale-performance", dependencies=[Depends(require_roles('admin', 'analyst'))])
+@router.get("/analytics/flash-sale-performance")
 def analytics_flash_sale_performance(
     from_date: datetime | None = Query(None, alias="from"),
     to_date: datetime | None = Query(None, alias="to"),
+    org_ctx: OrgContext = Depends(require_org_roles("owner", "admin", "analyst")),
     db: Session = Depends(get_db),
 ):
     start, end = analytics_period(from_date, to_date)
@@ -997,15 +1198,18 @@ def analytics_flash_sale_performance(
             FROM purchase_attempts p
             INNER JOIN flash_sale_products fsp
                 ON fsp.id = p.flash_sale_product_id
+               AND fsp.organisation_id = :org_id
             INNER JOIN flash_sales fs
                 ON fs.id = fsp.flash_sale_id
-            WHERE p.status = 'success'
+               AND fs.organisation_id = :org_id
+            WHERE p.organisation_id = :org_id
+              AND p.status = 'success'
               AND (CAST(:start AS TIMESTAMPTZ) IS NULL OR p.created_at >= CAST(:start AS TIMESTAMPTZ))
               AND (CAST(:end AS TIMESTAMPTZ) IS NULL OR p.created_at <= CAST(:end AS TIMESTAMPTZ))
             GROUP BY p.created_at::date
             ORDER BY period
         """),
-        {"start": start, "end": end},
+        {"org_id": org_ctx.organisation.id, "start": start, "end": end},
     ).mappings().all()
 
     return {
@@ -1021,7 +1225,6 @@ def analytics_flash_sale_performance(
         "origin": "simulation",
     }
 
-# ---------------- TRANSACTION MONITOR READ API ----------------
 
 # ---------------- TRANSACTION MONITOR READ API ----------------
 
@@ -1045,10 +1248,7 @@ def _transaction_monitor_item(row):
     }
 
 
-@router.get(
-    "/transactions",
-    dependencies=[Depends(require_roles("admin", "analyst", "operator"))],
-)
+@router.get("/transactions")
 def list_transactions(
     page: int = Query(1, ge=1),
     page_size: int = Query(25, alias="pageSize", ge=1, le=100),
@@ -1056,9 +1256,12 @@ def list_transactions(
     sort: str | None = Query("occurredAt"),
     order: str = Query("desc"),
     status: str | None = Query(None),
-    from_date: str | None = Query(None, alias="from"),
-    to_date: str | None = Query(None, alias="to"),
+    from_date: date | None = Query(None, alias="from"),
+    to_date: date | None = Query(None, alias="to"),
     origin: str | None = Query(None),
+    org_ctx: OrgContext = Depends(
+        require_org_roles("owner", "admin", "analyst", "operator")
+    ),
     db: Session = Depends(get_db),
 ):
     if order not in ("asc", "desc"):
@@ -1073,8 +1276,13 @@ def list_transactions(
     if sort_column is None:
         raise HTTPException(status_code=422, detail="Unsupported sort field")
 
-    where = []
-    params = {}
+    if from_date and to_date and from_date > to_date:
+        raise HTTPException(
+            status_code=422, detail="from date cannot be after to date"
+        )
+
+    where = ["organisation_id = :org_id"]
+    params: dict = {"org_id": org_ctx.organisation.id}
 
     if status:
         status_map = {
@@ -1090,9 +1298,10 @@ def list_transactions(
 
     if search:
         where.append(
-            "(CAST(id AS TEXT) ILIKE :search OR COALESCE(failure_reason, '') ILIKE :search)"
+            "(CAST(id AS TEXT) ILIKE :search ESCAPE '\\' "
+            "OR COALESCE(failure_reason, '') ILIKE :search ESCAPE '\\')"
         )
-        params["search"] = "%" + search.strip() + "%"
+        params["search"] = f"%{_escape_like(search.strip())}%"
 
     if from_date:
         where.append("created_at >= CAST(:from_date AS date)")
@@ -1105,7 +1314,7 @@ def list_transactions(
     if origin and origin != "simulation":
         where.append("1 = 0")
 
-    where_sql = (" WHERE " + " AND ".join(where)) if where else ""
+    where_sql = " WHERE " + " AND ".join(where)
     total = db.execute(
         text("SELECT COUNT(*) FROM purchase_attempts" + where_sql),
         params,
@@ -1131,12 +1340,12 @@ def list_transactions(
     }
 
 
-@router.get(
-    "/transactions/{attempt_id}",
-    dependencies=[Depends(require_roles("admin", "analyst", "operator"))],
-)
+@router.get("/transactions/{attempt_id}")
 def get_transaction(
     attempt_id: int,
+    org_ctx: OrgContext = Depends(
+        require_org_roles("owner", "admin", "analyst", "operator")
+    ),
     db: Session = Depends(get_db),
 ):
     row = fetch_one(
@@ -1144,9 +1353,9 @@ def get_transaction(
         """
         SELECT id, status, created_at, failure_reason
         FROM purchase_attempts
-        WHERE id = :attempt_id
+        WHERE id = :attempt_id AND organisation_id = :org_id
         """,
-        {"attempt_id": attempt_id},
+        {"attempt_id": attempt_id, "org_id": org_ctx.organisation.id},
     )
 
     if row is None:
@@ -1155,12 +1364,14 @@ def get_transaction(
     return _transaction_monitor_item(row)
 
 
-
-
 # ---------------- CONCURRENCY STRATEGIES & OVERVIEW ANALYTICS ----------------
 
 @router.get("/strategies")
-def get_strategies():
+def get_strategies(
+    _org_ctx: OrgContext = Depends(
+        require_org_roles("owner", "admin", "analyst", "operator")
+    ),
+):
     return {
         "items": [
             {"id": "atomic_update", "label": "Atomic Update (Optimistic)"},
@@ -1169,13 +1380,11 @@ def get_strategies():
     }
 
 
-@router.get(
-    "/analytics/purchase-outcomes",
-    dependencies=[Depends(require_roles("admin", "analyst"))],
-)
+@router.get("/analytics/purchase-outcomes")
 def analytics_purchase_outcomes(
     from_date: datetime | None = Query(None, alias="from"),
     to_date: datetime | None = Query(None, alias="to"),
+    org_ctx: OrgContext = Depends(require_org_roles("owner", "admin", "analyst")),
     db: Session = Depends(get_db),
 ):
     start, end = analytics_period(from_date, to_date)
@@ -1189,10 +1398,11 @@ def analytics_purchase_outcomes(
                 MIN(created_at) AS period_start,
                 MAX(created_at) AS period_end
             FROM purchase_attempts
-            WHERE (CAST(:start AS TIMESTAMPTZ) IS NULL OR created_at >= CAST(:start AS TIMESTAMPTZ))
+            WHERE organisation_id = :org_id
+              AND (CAST(:start AS TIMESTAMPTZ) IS NULL OR created_at >= CAST(:start AS TIMESTAMPTZ))
               AND (CAST(:end AS TIMESTAMPTZ) IS NULL OR created_at <= CAST(:end AS TIMESTAMPTZ))
         """),
-        {"start": start, "end": end},
+        {"org_id": org_ctx.organisation.id, "start": start, "end": end},
     ).mappings().one()
 
     return {
@@ -1206,11 +1416,12 @@ def analytics_purchase_outcomes(
     }
 
 
-@router.get(
-    "/analytics/inventory-allocation",
-    dependencies=[Depends(require_roles("admin", "analyst"))],
-)
-def analytics_inventory_allocation(db: Session = Depends(get_db)):
+@router.get("/analytics/inventory-allocation")
+def analytics_inventory_allocation(
+    org_ctx: OrgContext = Depends(require_org_roles("owner", "admin", "analyst")),
+    db: Session = Depends(get_db),
+):
+    org_id = org_ctx.organisation.id
     phys = db.execute(
         text("""
             SELECT
@@ -1218,7 +1429,9 @@ def analytics_inventory_allocation(db: Session = Depends(get_db)):
                 COALESCE(SUM(reserved_quantity), 0) AS reserved,
                 COALESCE(SUM(quantity - reserved_quantity), 0) AS available
             FROM simulation_inventory
-        """)
+            WHERE organisation_id = :org_id
+        """),
+        {"org_id": org_id},
     ).mappings().one()
 
     flash = db.execute(
@@ -1228,12 +1441,22 @@ def analytics_inventory_allocation(db: Session = Depends(get_db)):
                 COALESCE(SUM(sold_quantity), 0) AS sold,
                 COALESCE(SUM(stock_limit - sold_quantity), 0) AS remaining
             FROM flash_sale_products
-        """)
+            WHERE organisation_id = :org_id
+        """),
+        {"org_id": org_id},
     ).mappings().one()
 
-    sold_phys = db.execute(
-        text("SELECT COALESCE(SUM(quantity), 0) FROM purchase_attempts WHERE status = 'success'")
-    ).scalar() or 0
+    sold_phys = (
+        db.execute(
+            text(
+                "SELECT COALESCE(SUM(quantity), 0) "
+                "FROM purchase_attempts "
+                "WHERE organisation_id = :org_id AND status = 'success'"
+            ),
+            {"org_id": org_id},
+        ).scalar()
+        or 0
+    )
 
     return {
         "physical": {
@@ -1251,11 +1474,12 @@ def analytics_inventory_allocation(db: Session = Depends(get_db)):
     }
 
 
-@router.get(
-    "/analytics/flash-sales-overview",
-    dependencies=[Depends(require_roles("admin", "analyst"))],
-)
-def analytics_flash_sales_overview(db: Session = Depends(get_db)):
+@router.get("/analytics/flash-sales-overview")
+def analytics_flash_sales_overview(
+    org_ctx: OrgContext = Depends(require_org_roles("owner", "admin", "analyst")),
+    db: Session = Depends(get_db),
+):
+    org_id = org_ctx.organisation.id
     rows = db.execute(
         text("""
             SELECT
@@ -1266,11 +1490,15 @@ def analytics_flash_sales_overview(db: Session = Depends(get_db)):
                 COALESCE(SUM(fsp.sold_quantity), 0) AS sold,
                 COALESCE(SUM(fsp.stock_limit - fsp.sold_quantity), 0) AS remaining
             FROM flash_sales fs
-            LEFT JOIN flash_sale_products fsp ON fsp.flash_sale_id = fs.id
+            LEFT JOIN flash_sale_products fsp
+              ON fsp.flash_sale_id = fs.id
+             AND fsp.organisation_id = :org_id
+            WHERE fs.organisation_id = :org_id
             GROUP BY fs.id, fs.title, fs.status
             ORDER BY fs.id DESC
             LIMIT 10
-        """)
+        """),
+        {"org_id": org_id},
     ).mappings().all()
 
     return {
@@ -1289,18 +1517,20 @@ def analytics_flash_sales_overview(db: Session = Depends(get_db)):
     }
 
 
-@router.get(
-    "/analytics/activity",
-    dependencies=[Depends(require_roles("admin", "analyst"))],
-)
-def analytics_activity(db: Session = Depends(get_db)):
+@router.get("/analytics/activity")
+def analytics_activity(
+    org_ctx: OrgContext = Depends(require_org_roles("owner", "admin", "analyst")),
+    db: Session = Depends(get_db),
+):
     rows = db.execute(
         text("""
             SELECT id, action, outcome, created_at
             FROM transactions_log
+            WHERE organisation_id = :org_id
             ORDER BY created_at DESC
             LIMIT 20
-        """)
+        """),
+        {"org_id": org_ctx.organisation.id},
     ).mappings().all()
 
     items = []

@@ -21,6 +21,13 @@ def test_rossmann_rejects_operator(client, db_session):
         ),
         {"email": "operator@example.com"},
     )
+    db_session.execute(
+        __import__("sqlalchemy").text(
+            "UPDATE organisation_memberships SET role = 'operator' "
+            "WHERE user_id = (SELECT id FROM users WHERE email = :email)"
+        ),
+        {"email": "operator@example.com"},
+    )
     db_session.commit()
 
     response = client.get(
@@ -56,6 +63,13 @@ def create_user_with_role(client, db_session, email, role):
 
     db_session.execute(
         text("UPDATE users SET role = :role WHERE email = :email"),
+        {"role": role, "email": email},
+    )
+    db_session.execute(
+        text(
+            "UPDATE organisation_memberships SET role = :role "
+            "WHERE user_id = (SELECT id FROM users WHERE email = :email)"
+        ),
         {"role": role, "email": email},
     )
     db_session.commit()

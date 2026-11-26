@@ -21,6 +21,7 @@ def insert_attempt(
     attempt_id = db_session.execute(
         text("""
             INSERT INTO purchase_attempts (
+                organisation_id,
                 simulation_run_id,
                 flash_sale_product_id,
                 customer_ref,
@@ -30,6 +31,7 @@ def insert_attempt(
                 created_at
             )
             VALUES (
+                :org_id,
                 :run_id,
                 :product_id,
                 :customer,
@@ -41,6 +43,7 @@ def insert_attempt(
             RETURNING id
         """),
         {
+            "org_id": setup["organisation_id"],
             "run_id": setup["run_id"],
             "product_id": setup["sale_product_id"],
             "customer": customer_ref,

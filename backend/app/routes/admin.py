@@ -1,21 +1,25 @@
 ﻿from datetime import datetime, timezone
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import func, select, update
+from sqlalchemy import func, literal, or_, select, update
 from sqlalchemy.orm import Session
 
-from app.core.auth_dependencies import get_current_user, require_roles
+from app.core.auth_dependencies import (
+    DEFAULT_ORGANISATION_SLUG,
+    OrgContext,
+    get_current_user,
+    require_org_roles,
+    require_roles,
+)
 from app.core.database import get_db
 from app.models.auth import AuthSession, User
 from app.models.rossmann import AuditLog
 
-
 router = APIRouter(
     prefix="/api/admin",
     tags=["Administration"],
-    dependencies=[Depends(require_roles("admin"))],
 )
 
 
@@ -59,16 +63,23 @@ def revoke_user_sessions(db: Session, user_id: int) -> None:
     )
 
 
-@router.get("/users", response_model=list[AdminUserResponse])
+def _escape_like(value: str) -> str:
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+@router.get(
+    "/users",
+    response_model=list[AdminUserResponse],
+    dependencies=[Depends(require_roles("admin"))],
+)
 def list_users(db: Session = Depends(get_db)):
-    return db.scalars(
-        select(User).order_by(User.id)
-    ).all()
+    return db.scalars(select(User).order_by(User.id)).all()
 
 
 @router.patch(
     "/users/{user_id}/role",
     response_model=AdminUserResponse,
+    dependencies=[Depends(require_roles("admin"))],
 )
 def update_user_role(
     user_id: int,
@@ -99,10 +110,28 @@ def update_user_role(
                 detail="Cannot demote the last active administrator.",
             )
 
+    previous_role = user.role
     user.role = payload.role
     user.updated_at = datetime.now(timezone.utc)
 
     revoke_user_sessions(db, user.id)
+
+    db.add(
+        AuditLog(
+            organisation_id=None,
+            actor_type="admin",
+            actor_ref=current_user.email,
+            action="user_role_updated",
+            entity_name="users",
+            entity_id=str(user.id),
+            details={
+                "target_email": user.email,
+                "previous_role": previous_role,
+                "new_role": payload.role,
+                "status": "success",
+            },
+        )
+    )
 
     db.commit()
     db.refresh(user)
@@ -113,6 +142,7 @@ def update_user_role(
 @router.patch(
     "/users/{user_id}/status",
     response_model=AdminUserResponse,
+    dependencies=[Depends(require_roles("admin"))],
 )
 def update_user_status(
     user_id: int,
@@ -147,11 +177,29 @@ def update_user_status(
                 detail="Cannot disable the last active administrator.",
             )
 
+    previous_status = user.status
     user.status = payload.status
     user.updated_at = datetime.now(timezone.utc)
 
     if payload.status == "disabled":
         revoke_user_sessions(db, user.id)
+
+    db.add(
+        AuditLog(
+            organisation_id=None,
+            actor_type="admin",
+            actor_ref=current_user.email,
+            action="user_status_updated",
+            entity_name="users",
+            entity_id=str(user.id),
+            details={
+                "target_email": user.email,
+                "previous_status": previous_status,
+                "new_status": payload.status,
+                "status": "success",
+            },
+        )
+    )
 
     db.commit()
     db.refresh(user)
@@ -184,7 +232,10 @@ def _sanitize_metadata(details: dict | None) -> dict | None:
         return details
     sanitized = {}
     for k, v in details.items():
-        if any(secret_term in k.lower() for secret_term in ("password", "token", "secret", "hash", "key", "auth")):
+        if any(
+            secret_term in k.lower()
+            for secret_term in ("password", "token", "secret", "hash", "key", "auth")
+        ):
             sanitized[k] = "[REDACTED]"
         elif isinstance(v, dict):
             sanitized[k] = _sanitize_metadata(v)
@@ -203,10 +254,28 @@ def list_audit_logs(
     from_date: datetime | None = Query(None, alias="from"),
     to_date: datetime | None = Query(None, alias="to"),
     search: str | None = None,
+    x_organisation_id: str | None = Header(default=None, alias="X-Organisation-Id"),
+    org_ctx: OrgContext = Depends(require_org_roles("owner", "admin")),
     db: Session = Depends(get_db),
 ):
     query = select(AuditLog)
     count_query = select(func.count(AuditLog.id))
+
+    include_platform_logs = (
+        org_ctx.user.role == "admin"
+        and (x_organisation_id is None or x_organisation_id.strip() == "")
+        and org_ctx.organisation.slug == DEFAULT_ORGANISATION_SLUG
+    )
+    if include_platform_logs:
+        org_filter = or_(
+            AuditLog.organisation_id == org_ctx.organisation.id,
+            AuditLog.organisation_id.is_(None),
+        )
+    else:
+        org_filter = AuditLog.organisation_id == org_ctx.organisation.id
+
+    query = query.where(org_filter)
+    count_query = count_query.where(org_filter)
 
     if action:
         query = query.where(AuditLog.action == action)
@@ -214,6 +283,15 @@ def list_audit_logs(
     if entity_type:
         query = query.where(AuditLog.entity_name == entity_type)
         count_query = count_query.where(AuditLog.entity_name == entity_type)
+    if outcome:
+        outcome_expr = func.coalesce(
+            AuditLog.details["status"].astext,
+            AuditLog.details["outcome"].astext,
+            literal("recorded"),
+        )
+        outcome_filter = func.lower(outcome_expr) == outcome.strip().lower()
+        query = query.where(outcome_filter)
+        count_query = count_query.where(outcome_filter)
     if from_date:
         query = query.where(AuditLog.created_at >= from_date)
         count_query = count_query.where(AuditLog.created_at >= from_date)
@@ -221,29 +299,34 @@ def list_audit_logs(
         query = query.where(AuditLog.created_at <= to_date)
         count_query = count_query.where(AuditLog.created_at <= to_date)
     if search:
+        pattern = f"%{_escape_like(search.strip())}%"
         search_filter = (
-            AuditLog.actor_ref.ilike(f"%{search}%")
-            | AuditLog.actor_type.ilike(f"%{search}%")
-            | AuditLog.action.ilike(f"%{search}%")
-            | AuditLog.entity_name.ilike(f"%{search}%")
-            | AuditLog.entity_id.ilike(f"%{search}%")
+            AuditLog.actor_ref.ilike(pattern, escape="\\")
+            | AuditLog.actor_type.ilike(pattern, escape="\\")
+            | AuditLog.action.ilike(pattern, escape="\\")
+            | AuditLog.entity_name.ilike(pattern, escape="\\")
+            | AuditLog.entity_id.ilike(pattern, escape="\\")
         )
         query = query.where(search_filter)
         count_query = count_query.where(search_filter)
 
     total = db.scalar(count_query) or 0
     offset = (page - 1) * page_size
-    records = db.scalars(query.order_by(AuditLog.id.desc()).offset(offset).limit(page_size)).all()
+    records = db.scalars(
+        query.order_by(AuditLog.id.desc()).offset(offset).limit(page_size)
+    ).all()
 
     items = []
     for log in records:
-        actor = f"{log.actor_type}:{log.actor_ref}" if log.actor_ref else (log.actor_type or "system")
+        actor = (
+            f"{log.actor_type}:{log.actor_ref}"
+            if log.actor_ref
+            else (log.actor_type or "system")
+        )
         details = _sanitize_metadata(log.details)
         out = "recorded"
         if details and isinstance(details, dict):
             out = details.get("status") or details.get("outcome") or "recorded"
-        if outcome and out.lower() != outcome.lower():
-            continue
         items.append({
             "id": str(log.id),
             "occurred_at": log.created_at,

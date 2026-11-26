@@ -535,3 +535,165 @@ def test_concurrent_purchases_cannot_oversell_inventory(
     ).scalar_one()
 
     assert attempt_count == 20
+
+
+def test_concurrent_scheduled_auto_activation_with_allocation_and_activation(
+    db_session, purchase_setup, authenticated_client
+):
+    from datetime import datetime, timedelta, timezone
+    from app.models.rossmann import Store
+
+    # Create a flash sale whose window is open, allocate stock from the shared
+    # inventory_id, then set status='scheduled' so concurrent purchases trigger
+    # auto-activation while concurrent activate and allocate_sale_stock run on
+    # the same flash_sales row and shared simulation_inventory row.
+    now = datetime.now(timezone.utc)
+    sale_resp = authenticated_client.post(
+        f"/api/simulations/runs/{purchase_setup['run_id']}/flash-sales",
+        json={
+            "title": "Scheduled Concurrency Sale",
+            "starts_at": (now - timedelta(seconds=5)).isoformat(),
+            "ends_at": (now + timedelta(hours=2)).isoformat(),
+        },
+    )
+    assert sale_resp.status_code == 201
+    sale_id = sale_resp.json()["id"]
+
+    alloc_resp = authenticated_client.post(
+        f"/api/simulations/flash-sales/{sale_id}/products",
+        json={
+            "inventory_id": purchase_setup["inventory_id"],
+            "sale_price": "29.99",
+            "stock_limit": 5,
+        },
+    )
+    assert alloc_resp.status_code == 201
+    sale_product_id = alloc_resp.json()["id"]
+
+    db_session.execute(
+        text("UPDATE flash_sales SET status = 'scheduled' WHERE id = :id"),
+        {"id": sale_id},
+    )
+
+    # Create a second store/inventory and a second flash sale sharing the primary
+    # inventory_id so both flash_sales and simulation_inventory experience
+    # simultaneous cross-endpoint contention without deadlocks.
+    db_session.add(
+        Store(
+            store_id=402,
+            store_type="a",
+            assortment="a",
+            competition_distance=400,
+            promo2=False,
+        )
+    )
+    db_session.commit()
+
+    second_inv = authenticated_client.post(
+        "/api/simulations/inventory",
+        json={
+            "store_id": 402,
+            "product_id": purchase_setup["product_id"],
+            "quantity": 20,
+        },
+    )
+    assert second_inv.status_code == 201
+    second_inv_id = second_inv.json()["id"]
+
+    second_sale = authenticated_client.post(
+        f"/api/simulations/runs/{purchase_setup['run_id']}/flash-sales",
+        json={
+            "title": "Concurrent Contention Sale",
+            "starts_at": (now - timedelta(seconds=5)).isoformat(),
+            "ends_at": (now + timedelta(hours=2)).isoformat(),
+        },
+    )
+    assert second_sale.status_code == 201
+    second_sale_id = second_sale.json()["id"]
+
+    headers = dict(authenticated_client.headers)
+
+    def send_purchase(idx):
+        with TestClient(app, headers=headers) as concurrent_client:
+            return concurrent_client.post(
+                f"/api/simulations/flash-sale-products/{sale_product_id}/purchase",
+                json=purchase_payload(
+                    customer=f"SCHED-CUST-{idx}",
+                    key=f"SCHED-KEY-{idx}",
+                    quantity=1,
+                ),
+            )
+
+    def send_activate():
+        with TestClient(app, headers=headers) as concurrent_client:
+            return concurrent_client.post(
+                f"/api/simulations/flash-sales/{sale_id}/activate"
+            )
+
+    def send_allocate_same_sale():
+        with TestClient(app, headers=headers) as concurrent_client:
+            return concurrent_client.post(
+                f"/api/simulations/flash-sales/{sale_id}/products",
+                json={
+                    "inventory_id": second_inv_id,
+                    "sale_price": "19.99",
+                    "stock_limit": 5,
+                },
+            )
+
+    def send_allocate_shared_inventory():
+        with TestClient(app, headers=headers) as concurrent_client:
+            return concurrent_client.post(
+                f"/api/simulations/flash-sales/{second_sale_id}/products",
+                json={
+                    "inventory_id": purchase_setup["inventory_id"],
+                    "sale_price": "39.99",
+                    "stock_limit": 5,
+                },
+            )
+
+    with ThreadPoolExecutor(max_workers=11) as executor:
+        futures = [executor.submit(send_purchase, i) for i in range(8)]
+        futures.append(executor.submit(send_activate))
+        futures.append(executor.submit(send_allocate_same_sale))
+        futures.append(executor.submit(send_allocate_shared_inventory))
+        results = [f.result() for f in futures]
+
+    purchase_results = results[:8]
+    activate_result = results[8]
+    alloc_same_result = results[9]
+    alloc_shared_result = results[10]
+
+    assert all(r.status_code == 200 for r in purchase_results)
+    assert activate_result.status_code == 200
+    assert alloc_same_result.status_code == 201
+    assert alloc_shared_result.status_code == 201
+
+    assert sum(1 for r in purchase_results if r.json()["success"] is True) == 5
+    assert sum(1 for r in purchase_results if r.json()["success"] is False) == 3
+
+    final_status = db_session.execute(
+        text("SELECT status FROM flash_sales WHERE id = :id"),
+        {"id": sale_id},
+    ).scalar_one()
+    assert final_status == "active"
+
+    # purchase_setup starts with 100 physical, 10 reserved (sale 1) + 5 reserved (scheduled sale)
+    # + 5 newly reserved (second_sale) - 5 purchased = 95 physical, 15 reserved.
+    inv1 = db_session.execute(
+        text(
+            "SELECT quantity, reserved_quantity FROM simulation_inventory WHERE id = :id"
+        ),
+        {"id": purchase_setup["inventory_id"]},
+    ).mappings().one()
+    assert inv1["quantity"] == 95
+    assert inv1["reserved_quantity"] == 15
+
+    inv2 = db_session.execute(
+        text(
+            "SELECT quantity, reserved_quantity FROM simulation_inventory WHERE id = :id"
+        ),
+        {"id": second_inv_id},
+    ).mappings().one()
+    assert inv2["quantity"] == 20
+    assert inv2["reserved_quantity"] == 5

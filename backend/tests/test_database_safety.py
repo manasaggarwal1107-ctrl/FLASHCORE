@@ -34,6 +34,9 @@ def test_active_schema_contains_all_expected_tables(db_session):
         "audit_logs",
         "users",
         "auth_sessions",
+        "organisations",
+        "organisation_memberships",
+        "alembic_version",
     }
 
     assert set(tables) == expected_tables

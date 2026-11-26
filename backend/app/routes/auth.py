@@ -4,26 +4,30 @@ from datetime import datetime, timezone
 from typing import Literal
 
 import jwt
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.auth_dependencies import get_current_user
+from app.core.auth_dependencies import (
+    get_current_user,
+    get_or_create_default_organisation,
+    get_user_organisations,
+    resolve_org_context_for_id,
+)
 from app.core.database import get_db
 from app.core.security import (
     create_access_token,
+    decode_access_token,
     hash_password,
     verify_password,
-    decode_access_token,
 )
 from app.models.auth import AuthSession, User
-
+from app.models.organisation import OrganisationMembership
 
 bearer_scheme = HTTPBearer(auto_error=False)
-
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 
@@ -54,6 +58,15 @@ class LoginRequest(BaseModel):
         return value
 
 
+class UserOrganisationOut(BaseModel):
+    organisation_id: int
+    organisation_name: str
+    organisation_slug: str
+    organisation_status: str
+    role: str
+    membership_status: str
+
+
 class UserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -62,6 +75,9 @@ class UserResponse(BaseModel):
     role: str
     status: str
     created_at: datetime
+    active_organisation_id: int | None = None
+    active_organisation_role: str | None = None
+    organisations: list[UserOrganisationOut] = Field(default_factory=list)
 
 
 class AuthResponse(BaseModel):
@@ -69,6 +85,47 @@ class AuthResponse(BaseModel):
     token_type: Literal["bearer"] = "bearer"
     expires_at: datetime
     user: UserResponse
+
+
+def _build_user_response(
+    db: Session,
+    user: User,
+    requested_org_id: int | None = None,
+) -> UserResponse:
+    org_rows = get_user_organisations(db, user.id)
+    organisations = [
+        UserOrganisationOut(
+            organisation_id=org.id,
+            organisation_name=org.name,
+            organisation_slug=org.slug,
+            organisation_status=org.status,
+            role=membership.role,
+            membership_status=membership.status,
+        )
+        for membership, org in org_rows
+    ]
+
+    active_org_id: int | None = None
+    active_org_role: str | None = None
+
+    if requested_org_id is not None:
+        ctx = resolve_org_context_for_id(db, user, requested_org_id)
+        active_org_id = ctx.organisation.id
+        active_org_role = ctx.membership.role
+    elif organisations:
+        active_org_id = organisations[0].organisation_id
+        active_org_role = organisations[0].role
+
+    return UserResponse(
+        id=user.id,
+        email=user.email,
+        role=user.role,
+        status=user.status,
+        created_at=user.created_at,
+        active_organisation_id=active_org_id,
+        active_organisation_role=active_org_role,
+        organisations=organisations,
+    )
 
 
 def issue_session(db: Session, user: User) -> AuthResponse:
@@ -89,7 +146,7 @@ def issue_session(db: Session, user: User) -> AuthResponse:
     return AuthResponse(
         access_token=token,
         expires_at=expires_at,
-        user=user,
+        user=_build_user_response(db, user),
     )
 
 
@@ -100,7 +157,9 @@ def signup(payload: SignupRequest, db: Session = Depends(get_db)):
     )
 
     if existing is not None:
-        raise HTTPException(status_code=409, detail="An account with this email already exists.")
+        raise HTTPException(
+            status_code=409, detail="An account with this email already exists."
+        )
 
     user = User(
         email=payload.email,
@@ -111,6 +170,17 @@ def signup(payload: SignupRequest, db: Session = Depends(get_db)):
 
     try:
         db.add(user)
+        db.flush()
+
+        default_org = get_or_create_default_organisation(db)
+        db.add(
+            OrganisationMembership(
+                organisation_id=default_org.id,
+                user_id=user.id,
+                role="analyst",
+                status="active",
+            )
+        )
         db.flush()
         return issue_session(db, user)
     except IntegrityError as exc:
@@ -142,8 +212,26 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
 
 
 @router.get("/me", response_model=UserResponse)
-def get_profile(current_user: User = Depends(get_current_user)):
-    return current_user
+def get_profile(
+    current_user: User = Depends(get_current_user),
+    x_organisation_id: str | None = Header(default=None, alias="X-Organisation-Id"),
+    db: Session = Depends(get_db),
+):
+    requested_org_id: int | None = None
+    if x_organisation_id is not None and x_organisation_id.strip() != "":
+        try:
+            requested_org_id = int(x_organisation_id.strip())
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422, detail="Invalid X-Organisation-Id header."
+            ) from exc
+        if requested_org_id <= 0:
+            raise HTTPException(
+                status_code=422,
+                detail="X-Organisation-Id must be a positive integer.",
+            )
+
+    return _build_user_response(db, current_user, requested_org_id=requested_org_id)
 
 
 @router.post("/logout", status_code=204)
@@ -156,7 +244,9 @@ def logout(
         payload = decode_access_token(credentials.credentials)
         jti = uuid.UUID(payload["jti"])
     except (jwt.InvalidTokenError, ValueError, TypeError, KeyError):
-        raise HTTPException(status_code=401, detail="Invalid authentication credentials.")
+        raise HTTPException(
+            status_code=401, detail="Invalid authentication credentials."
+        )
 
     session = db.get(AuthSession, jti)
 

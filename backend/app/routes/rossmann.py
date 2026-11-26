@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, func, text
 from sqlalchemy.orm import Session
 
-from app.core.auth_dependencies import require_roles
+from app.core.auth_dependencies import require_org_roles
 from app.core.database import get_db
 from app.models.rossmann import Store, DailyStoreSale
 from app.schemas.rossmann import (
@@ -17,7 +17,7 @@ from app.schemas.rossmann import (
 router = APIRouter(
     prefix="/api/rossmann",
     tags=["Rossmann Historical Data"],
-    dependencies=[Depends(require_roles("admin", "analyst"))],
+    dependencies=[Depends(require_org_roles("owner", "admin", "analyst"))],
 )
 
 

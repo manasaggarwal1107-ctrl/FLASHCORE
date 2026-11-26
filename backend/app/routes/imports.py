@@ -2,17 +2,16 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from app.core.auth_dependencies import require_roles
+from app.core.auth_dependencies import OrgContext, require_org_roles
 from app.core.database import get_db
 from app.models.rossmann import DatasetImport, DatasetImportError
 
 router = APIRouter(
     prefix="/api/imports",
     tags=["Dataset Imports"],
-    dependencies=[Depends(require_roles("admin", "analyst"))],
 )
 
 
@@ -50,6 +49,10 @@ class DataImportListResponse(BaseModel):
     page_size: int
 
 
+def _escape_like(value: str) -> str:
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 def _map_import(imp: DatasetImport) -> dict:
     return {
         "id": str(imp.id),
@@ -74,15 +77,21 @@ def list_imports(
     page: int = Query(1, ge=1),
     page_size: int = Query(25, ge=1, le=100, alias="pageSize"),
     search: str | None = None,
+    org_ctx: OrgContext = Depends(require_org_roles("owner", "admin", "analyst")),
     db: Session = Depends(get_db),
 ):
-    query = select(DatasetImport)
-    count_query = select(func.count(DatasetImport.id))
+    scope_filter = or_(
+        DatasetImport.organisation_id == org_ctx.organisation.id,
+        DatasetImport.organisation_id.is_(None),
+    )
+    query = select(DatasetImport).where(scope_filter)
+    count_query = select(func.count(DatasetImport.id)).where(scope_filter)
 
     if search:
+        pattern = f"%{_escape_like(search.strip())}%"
         search_filter = (
-            DatasetImport.source_file.ilike(f"%{search}%")
-            | DatasetImport.source_name.ilike(f"%{search}%")
+            DatasetImport.source_file.ilike(pattern, escape="\\")
+            | DatasetImport.source_name.ilike(pattern, escape="\\")
         )
         query = query.where(search_filter)
         count_query = count_query.where(search_filter)
@@ -104,9 +113,18 @@ def list_imports(
 @router.get("/{import_id}", response_model=DataImportDetail)
 def get_import(
     import_id: int,
+    org_ctx: OrgContext = Depends(require_org_roles("owner", "admin", "analyst")),
     db: Session = Depends(get_db),
 ):
-    imp = db.get(DatasetImport, import_id)
+    imp = db.scalar(
+        select(DatasetImport).where(
+            DatasetImport.id == import_id,
+            or_(
+                DatasetImport.organisation_id == org_ctx.organisation.id,
+                DatasetImport.organisation_id.is_(None),
+            ),
+        )
+    )
     if imp is None:
         raise HTTPException(status_code=404, detail="Dataset import not found.")
 

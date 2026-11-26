@@ -99,6 +99,12 @@ def test_imports_authorization(client, db_session):
     db_session.execute(
         text("UPDATE users SET role = 'operator' WHERE email = 'operator-imports@flashcore.local'")
     )
+    db_session.execute(
+        text(
+            "UPDATE organisation_memberships SET role = 'operator' "
+            "WHERE user_id = (SELECT id FROM users WHERE email = 'operator-imports@flashcore.local')"
+        )
+    )
     db_session.commit()
 
     res = client.get("/api/imports", headers={"Authorization": f"Bearer {token}"})
@@ -159,8 +165,12 @@ def test_audit_logs_authorization(client, db_session):
     assert res.status_code == 403
 
 
-def test_simulation_strategies(client):
-    res = client.get("/api/simulations/strategies")
+def test_simulation_strategies_requires_authentication(client):
+    assert client.get("/api/simulations/strategies").status_code == 401
+
+
+def test_simulation_strategies(authenticated_client):
+    res = authenticated_client.get("/api/simulations/strategies")
     assert res.status_code == 200
     data = res.json()
     assert "items" in data

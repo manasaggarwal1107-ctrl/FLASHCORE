@@ -30,7 +30,7 @@ from main import app
 
 
 TABLES = (
-    "auth_sessions, users, "
+    "auth_sessions, organisation_memberships, users, "
     "audit_logs, "
     "transactions_log, "
     "purchase_attempts, "
@@ -42,7 +42,8 @@ TABLES = (
     "daily_store_sales, "
     "dataset_import_errors, "
     "dataset_imports, "
-    "stores"
+    "stores, "
+    "organisations"
 )
 
 
@@ -110,6 +111,14 @@ def authenticated_client(client, db_session):
 
     db_session.execute(
         text("UPDATE users SET role = 'admin' WHERE email = :email"),
+        {"email": email},
+    )
+    db_session.execute(
+        text("""
+            UPDATE organisation_memberships
+            SET role = 'admin'
+            WHERE user_id = (SELECT id FROM users WHERE email = :email)
+        """),
         {"email": email},
     )
     db_session.commit()
@@ -199,6 +208,7 @@ def purchase_setup(authenticated_client, db_session):
     sale_product_id = allocation_response.json()["id"]
 
     return {
+        "organisation_id": run_response.json()["organisation_id"],
         "run_id": run_id,
         "sale_id": sale_id,
         "sale_product_id": sale_product_id,
