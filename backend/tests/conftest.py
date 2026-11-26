@@ -30,6 +30,10 @@ from main import app
 
 
 TABLES = (
+    "payment_webhook_events, payment_transactions, payment_attempts, "
+    "payment_orders, payment_provider_accounts, "
+    "order_events, inventory_reservations, order_items, orders, customers, "
+    "inventory_movements, inventory_balances, inventory_locations, commerce_products, "
     "auth_sessions, organisation_memberships, users, "
     "audit_logs, "
     "transactions_log, "
