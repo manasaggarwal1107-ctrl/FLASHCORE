@@ -7,6 +7,7 @@ from app.core.database import DATABASE_URL, Base, engine
 # Import ONLY active SQLAlchemy models so Alembic discovers the active schema
 # and ignores legacy unmounted models in app.models.commerce / app.models.flash_sale.
 import app.models.auth  # noqa: F401
+import app.models.finance  # noqa: F401
 import app.models.organisation  # noqa: F401
 import app.models.payments  # noqa: F401
 import app.models.retail  # noqa: F401

@@ -38,6 +38,10 @@ from main import app
 
 
 TABLES = (
+    "payment_reconciliation_items, payment_reconciliation_runs, "
+    "payment_settlement_items, payment_settlements, payment_statement_imports, "
+    "payment_links, payment_refund_events, payment_approval_requests, "
+    "payment_refunds, payment_approval_policies, "
     "payment_webhook_events, payment_transactions, payment_attempts, "
     "payment_orders, payment_provider_accounts, "
     "order_events, inventory_reservations, order_items, orders, customers, "

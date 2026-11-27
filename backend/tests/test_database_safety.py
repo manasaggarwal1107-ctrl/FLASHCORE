@@ -50,6 +50,16 @@ def test_active_schema_contains_all_expected_tables(db_session):
         "payment_attempts",
         "payment_transactions",
         "payment_webhook_events",
+        "payment_approval_policies",
+        "payment_refunds",
+        "payment_approval_requests",
+        "payment_refund_events",
+        "payment_links",
+        "payment_statement_imports",
+        "payment_settlements",
+        "payment_settlement_items",
+        "payment_reconciliation_runs",
+        "payment_reconciliation_items",
         "alembic_version",
     }
 

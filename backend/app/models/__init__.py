@@ -1,4 +1,16 @@
 from app.models.auth import AuthSession, User
+from app.models.finance import (
+    PaymentApprovalPolicy,
+    PaymentApprovalRequest,
+    PaymentLink,
+    PaymentReconciliationItem,
+    PaymentReconciliationRun,
+    PaymentRefund,
+    PaymentRefundEvent,
+    PaymentSettlement,
+    PaymentSettlementItem,
+    PaymentStatementImport,
+)
 from app.models.organisation import Organisation, OrganisationMembership
 from app.models.payments import (
     PaymentAttempt,
@@ -54,9 +66,19 @@ __all__ = [
     "OrderItem",
     "Organisation",
     "OrganisationMembership",
+    "PaymentApprovalPolicy",
+    "PaymentApprovalRequest",
     "PaymentAttempt",
+    "PaymentLink",
     "PaymentOrder",
     "PaymentProviderAccount",
+    "PaymentReconciliationItem",
+    "PaymentReconciliationRun",
+    "PaymentRefund",
+    "PaymentRefundEvent",
+    "PaymentSettlement",
+    "PaymentSettlementItem",
+    "PaymentStatementImport",
     "PaymentTransaction",
     "PaymentWebhookEvent",
     "PurchaseAttempt",
