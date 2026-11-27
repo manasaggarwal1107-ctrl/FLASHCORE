@@ -1,10 +1,14 @@
+import base64
+import hashlib
 import os
 
 # Force the isolated test database before importing the application.
 os.environ["DB_NAME"] = "flashcore_test"
 os.environ.setdefault(
     "FLASHCORE_CREDENTIAL_ENCRYPTION_KEY",
-    "flashcore-test-only-credential-encryption-key-32",
+    base64.urlsafe_b64encode(
+        hashlib.sha256(b"flashcore-isolated-test-suite-credential-key").digest()
+    ).decode("ascii"),
 )
 
 from sqlalchemy import text

@@ -50,9 +50,44 @@ def test_credential_encryption_roundtrip_and_aad_isolation(monkeypatch):
     assert "rzp_secret_value_1" not in cipher
     assert decrypt_secret(cipher, aad="org:1:provider:razorpay") == "rzp_secret_value_1"
 
+    # Supports key versioning cleanly
+    cipher_v2 = encrypt_secret(
+        "rzp_secret_v2", aad="org:1:provider:razorpay", key_version="v2"
+    )
+    assert cipher_v2.startswith("v2:")
+    assert decrypt_secret(cipher_v2, aad="org:1:provider:razorpay") == "rzp_secret_v2"
+
     # Transplanting ciphertext to another org AAD fails authenticated decryption
     with pytest.raises(Exception):
         decrypt_secret(cipher, aad="org:2:provider:razorpay")
+
+    # Existing ciphertext remains decryptable with a valid 32-byte URL-safe base64 key
+    import base64
+    import os
+
+    generated_key = base64.urlsafe_b64encode(os.urandom(32)).decode("ascii")
+    monkeypatch.setenv("FLASHCORE_CREDENTIAL_ENCRYPTION_KEY", generated_key)
+    stable_cipher = encrypt_secret("existing_cred_value", aad="org:9:provider:razorpay")
+    assert decrypt_secret(stable_cipher, aad="org:9:provider:razorpay") == "existing_cred_value"
+
+    # Unpadded 43-char canonical URL-safe base64 form of the same 32-byte key also works identically
+    monkeypatch.setenv("FLASHCORE_CREDENTIAL_ENCRYPTION_KEY", generated_key.rstrip("="))
+    assert decrypt_secret(stable_cipher, aad="org:9:provider:razorpay") == "existing_cred_value"
+
+    # Invalid / short / weak / malformed keys are rejected strictly without leaking key values
+    bad_keys = [
+        "short-secret",
+        "arbitrary-utf8-passphrase-not-32-byte-b64",
+        base64.urlsafe_b64encode(os.urandom(16)).decode("ascii"),  # 16 bytes (too short)
+        base64.urlsafe_b64encode(os.urandom(64)).decode("ascii"),  # 64 bytes (wrong length)
+        base64.urlsafe_b64encode(b"\x00" * 32).decode("ascii"),  # low entropy / all zeros
+        "!" * 44,  # malformed base64
+    ]
+    for bad in bad_keys:
+        monkeypatch.setenv("FLASHCORE_CREDENTIAL_ENCRYPTION_KEY", bad)
+        with pytest.raises(RuntimeError) as exc_info:
+            encrypt_secret("secret", aad="org:1:provider:razorpay")
+        assert bad not in str(exc_info.value)
 
     # Missing env key fails loudly (no silent fallback)
     monkeypatch.delenv("FLASHCORE_CREDENTIAL_ENCRYPTION_KEY", raising=False)
