@@ -64,20 +64,21 @@ function AppShellContent() {
       <AnimatePresence>
         {mobileOpen && (
           <div className="fixed inset-0 z-50 lg:hidden">
-            <motion.div className="absolute inset-0 bg-canvas/70" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setMobileOpen(false)} />
+            <motion.div className="absolute inset-0 bg-sidebar/75" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setMobileOpen(false)} />
             <motion.aside
+              data-sidebar-theme="fixed-dark"
               role="dialog"
               aria-modal="true"
               aria-label="Navigation"
-              className="absolute inset-y-0 left-0 flex w-64 flex-col border-r border-line bg-sidebar"
+              className="absolute inset-y-0 left-0 flex w-64 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-ink"
               initial={{ x: -264 }}
               animate={{ x: 0 }}
               exit={{ x: -264 }}
               transition={{ duration: 0.18 }}
             >
-              <div className="flex h-14 items-center justify-between border-b border-line px-4">
-                <Logo />
-                <button type="button" onClick={() => setMobileOpen(false)} aria-label="Close navigation" className="rounded p-1 text-ink-muted hover:text-ink">
+              <div className="flex h-14 items-center justify-between border-b border-sidebar-border px-4">
+                <Logo surface="sidebar" />
+                <button type="button" onClick={() => setMobileOpen(false)} aria-label="Close navigation" className="rounded p-1 text-sidebar-muted transition-colors hover:bg-sidebar-surface hover:text-sidebar-ink">
                   <X className="h-4 w-4" aria-hidden />
                 </button>
               </div>

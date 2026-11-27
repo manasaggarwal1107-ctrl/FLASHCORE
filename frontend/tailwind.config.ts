@@ -11,7 +11,15 @@ export default {
     extend: {
       colors: {
         canvas: token('canvas'),
-        sidebar: token('sidebar'),
+        sidebar: {
+          DEFAULT: token('sidebar'),
+          surface: token('sidebar-surface'),
+          border: token('sidebar-border'),
+          ink: token('sidebar-ink'),
+          muted: token('sidebar-ink-muted'),
+          faint: token('sidebar-ink-faint'),
+          accent: token('sidebar-accent'),
+        },
         surface: {
           DEFAULT: token('surface-1'),
           raised: token('surface-2'),
@@ -38,8 +46,8 @@ export default {
       },
       borderRadius: { DEFAULT: '4px', md: '6px', lg: '8px' },
       boxShadow: {
-        raised: '0 1px 0 0 rgb(255 255 255 / 0.03) inset, 0 1px 2px 0 rgb(0 0 0 / 0.4)',
-        overlay: '0 12px 32px -8px rgb(0 0 0 / 0.6), 0 0 0 1px rgb(var(--line) / 1)',
+        raised: 'var(--shadow-raised)',
+        overlay: 'var(--shadow-overlay)',
       },
     },
   },

@@ -5,6 +5,28 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#070b18" />
     <title>FLASHCORE — Precision at the speed of demand</title>
+    <script>
+      (function () {
+        try {
+          var saved = window.localStorage.getItem('flashcore.theme');
+          var preference =
+            saved === 'light' || saved === 'dark' || saved === 'system' ? saved : 'system';
+          var prefersDark =
+            typeof window.matchMedia === 'function' &&
+            window.matchMedia('(prefers-color-scheme: dark)').matches;
+          var resolved = preference === 'system' ? (prefersDark ? 'dark' : 'light') : preference;
+          var root = document.documentElement;
+          root.dataset.theme = resolved;
+          root.dataset.themePreference = preference;
+          root.classList.toggle('dark', resolved === 'dark');
+          root.style.colorScheme = resolved;
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) meta.setAttribute('content', resolved === 'dark' ? '#070b18' : '#f4f6fa');
+        } catch (_err) {
+          /* Fall back safely to default dark styling when storage/matchMedia is unavailable. */
+        }
+      })();
+    </script>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />

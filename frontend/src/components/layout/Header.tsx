@@ -3,13 +3,15 @@ import { Link, useNavigate } from 'react-router-dom';
 import {
   Bell,
   Building2,
+  Check,
   KeyRound,
   LogOut,
   Menu,
-  Search,
-  UserCircle2,
-  Sun,
+  Monitor,
   Moon,
+  Search,
+  Sun,
+  UserCircle2,
 } from 'lucide-react';
 
 import { Popover } from '@/components/ui/Popover';
@@ -18,9 +20,20 @@ import { useOptionalAuth } from '@/hooks/useAuth';
 import { Breadcrumbs } from './Breadcrumbs';
 import { ConnectivityIndicator, EnvironmentBadge } from './StatusIndicators';
 import { useTheme } from './ThemeProvider';
+import type { ThemePreference } from './ThemeProvider';
 
 const iconButton =
   'inline-flex h-8 w-8 items-center justify-center rounded text-ink-muted transition-colors hover:bg-surface-raised hover:text-ink';
+
+const THEME_OPTIONS: Array<{
+  value: ThemePreference;
+  label: string;
+  icon: typeof Sun;
+}> = [
+  { value: 'light', label: 'Light', icon: Sun },
+  { value: 'dark', label: 'Dark', icon: Moon },
+  { value: 'system', label: 'System default', icon: Monitor },
+];
 
 export function Header({
   onOpenMobileNav,
@@ -32,8 +45,10 @@ export function Header({
   const token = useAuthToken();
   const auth = useOptionalAuth();
   const navigate = useNavigate();
-  const { theme, toggleTheme } = useTheme();
+  const { theme, preference, systemTheme, setTheme } = useTheme();
   const [switchingOrg, setSwitchingOrg] = useState(false);
+
+  const ActiveThemeIcon = preference === 'system' ? Monitor : theme === 'dark' ? Moon : Sun;
 
   const user = auth?.user;
   const organisations = auth?.organisations ?? [];
@@ -108,17 +123,58 @@ export function Header({
           <Search className="h-4 w-4" aria-hidden />
         </button>
 
-        <button
-          type="button"
-          onClick={toggleTheme}
-          className={iconButton}
-          aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-          title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+        <Popover
+          trigger={({ toggle, ...aria }) => (
+            <button
+              type="button"
+              onClick={toggle}
+              className={iconButton}
+              aria-label={`Theme mode: ${preference}`}
+              title={`Theme: ${preference === 'system' ? `System (${theme})` : preference}`}
+              {...aria}
+            >
+              <ActiveThemeIcon className="h-4 w-4" aria-hidden />
+            </button>
+          )}
         >
-          {theme === 'dark'
-            ? <Sun className="h-4 w-4" aria-hidden />
-            : <Moon className="h-4 w-4" aria-hidden />}
-        </button>
+          {(close) => (
+            <div className="w-52 p-1.5" role="radiogroup" aria-label="Theme mode">
+              <div className="px-2.5 py-1.5 text-2xs font-medium uppercase text-ink-faint">
+                Appearance
+              </div>
+              {THEME_OPTIONS.map((option) => {
+                const Icon = option.icon;
+                const selected = preference === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    onClick={() => {
+                      setTheme(option.value);
+                      close();
+                    }}
+                    className="flex w-full items-center justify-between rounded px-2.5 py-1.5 text-left text-sm text-ink transition-colors hover:bg-surface-raised"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Icon className="h-3.5 w-3.5 text-ink-muted" aria-hidden />
+                      <span>
+                        <span className="block">{option.label}</span>
+                        {option.value === 'system' && (
+                          <span className="block text-2xs text-ink-faint">
+                            Active: {systemTheme}
+                          </span>
+                        )}
+                      </span>
+                    </span>
+                    {selected && <Check className="h-3.5 w-3.5 text-accent" aria-hidden />}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </Popover>
 
         <ConnectivityIndicator />
         <EnvironmentBadge />
@@ -212,7 +268,7 @@ export function Header({
                       navigate('/login', { replace: true });
                     })();
                   }}
-                  className="mt-1 flex h-8 w-full items-center gap-2 rounded px-2.5 text-sm text-red-400 hover:bg-red-500/10"
+                  className="mt-1 flex h-8 w-full items-center gap-2 rounded px-2.5 text-sm text-danger hover:bg-danger/10"
                 >
                   <LogOut className="h-4 w-4" aria-hidden />
                   Sign out

@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { createQueryClient } from '@/services/api/queryClient';
 import { AuthProvider } from '@/app/AuthProvider';
+import { ThemeProvider } from '@/components/layout/ThemeProvider';
 
 export function Providers({ children }: { children: ReactNode }) {
   const [client] = useState(createQueryClient);
@@ -13,10 +14,12 @@ export function Providers({ children }: { children: ReactNode }) {
   }, [client]);
 
   return (
-    <QueryClientProvider client={client}>
-      <AuthProvider onClearCache={clearCache}>
-        {children}
-      </AuthProvider>
-    </QueryClientProvider>
+    <ThemeProvider>
+      <QueryClientProvider client={client}>
+        <AuthProvider onClearCache={clearCache}>
+          {children}
+        </AuthProvider>
+      </QueryClientProvider>
+    </ThemeProvider>
   );
 }

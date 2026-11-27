@@ -21,16 +21,16 @@ export function SidebarNav({
     : navGroups;
 
   return (
-    <nav aria-label="Primary" className="flex-1 overflow-y-auto px-2 py-3">
+    <nav aria-label="Primary" className="flex-1 overflow-y-auto px-2 py-3 text-sidebar-ink">
       {visibleGroups.map((group) => (
         <div key={group.label} className="mb-4">
           {!collapsed && (
-            <div className="eyebrow mb-1.5 px-2">{group.label}</div>
+            <div className="sidebar-eyebrow mb-1.5 px-2">{group.label}</div>
           )}
 
           {collapsed && (
             <div
-              className="mx-2 mb-1.5 border-t border-line first:hidden"
+              className="mx-2 mb-1.5 border-t border-sidebar-border first:hidden"
               aria-hidden
             />
           )}
@@ -47,8 +47,8 @@ export function SidebarNav({
                       'group relative flex h-8 items-center gap-2.5 rounded px-2 text-sm transition-colors',
                       collapsed && 'justify-center',
                       isActive
-                        ? 'bg-accent/10 font-medium text-accent'
-                        : 'text-ink-muted hover:bg-surface-raised hover:text-ink',
+                        ? 'bg-sidebar-accent/10 font-medium text-sidebar-accent'
+                        : 'text-sidebar-muted hover:bg-sidebar-surface hover:text-sidebar-ink',
                     )
                   }
                 >
@@ -56,7 +56,7 @@ export function SidebarNav({
                     <>
                       {isActive && (
                         <span
-                          className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-accent"
+                          className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-sidebar-accent"
                           aria-hidden
                         />
                       )}
@@ -80,7 +80,7 @@ export function SidebarNav({
   );
 }
 
-/** Desktop (lg+) collapsible sidebar. */
+/** Desktop (lg+) collapsible sidebar. Always uses fixed dark navigation tokens. */
 export function Sidebar({
   collapsed,
   onToggle,
@@ -90,30 +90,31 @@ export function Sidebar({
 }) {
   return (
     <aside
+      data-sidebar-theme="fixed-dark"
       className={cn(
-        'hidden shrink-0 flex-col border-r border-line bg-sidebar transition-[width] duration-200 lg:flex',
+        'hidden shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-ink transition-[width] duration-200 lg:flex',
         collapsed ? 'w-[60px]' : 'w-60',
       )}
     >
       <div
         className={cn(
-          'flex h-14 items-center border-b border-line',
+          'flex h-14 items-center border-b border-sidebar-border',
           collapsed ? 'justify-center' : 'px-4',
         )}
       >
-        <Logo collapsed={collapsed} />
+        <Logo collapsed={collapsed} surface="sidebar" />
       </div>
 
       <SidebarNav collapsed={collapsed} />
 
-      <div className="border-t border-line p-2">
+      <div className="border-t border-sidebar-border p-2">
         <button
           type="button"
           onClick={onToggle}
           aria-label={collapsed ? 'Expand navigation' : 'Collapse navigation'}
           aria-expanded={!collapsed}
           className={cn(
-            'flex h-8 w-full items-center gap-2 rounded px-2 text-xs text-ink-faint transition-colors hover:bg-surface-raised hover:text-ink',
+            'flex h-8 w-full items-center gap-2 rounded px-2 text-xs text-sidebar-faint transition-colors hover:bg-sidebar-surface hover:text-sidebar-ink',
             collapsed && 'justify-center',
           )}
         >
