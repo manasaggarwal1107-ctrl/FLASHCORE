@@ -1,0 +1,24 @@
+{
+  "status": "PREPARED_INACTIVE_REQUIRES_APPROVAL",
+  "purpose": "Future independent production configuration for manasaggarwal1107-ctrl/FLASHCORE (distinct from legacy project 'flashcore' linked to DATABASE-MANAGEMENT-SYSTEM)",
+  "vercelProject": {
+    "name": "flashcore-platform",
+    "namingNote": "Adapted from 'flashcore' because legacy academic production occupies project name 'flashcore' (https://flashcore-psi.vercel.app).",
+    "gitRepository": "manasaggarwal1107-ctrl/FLASHCORE",
+    "productionBranch": "main",
+    "rootDirectory": "frontend",
+    "framework": "vite",
+    "buildEnv": {
+      "VITE_APP_ENV": "production",
+      "VITE_API_BASE_URL": "<SET_TO_APPROVED_FLASHCORE_API_PRODUCTION_URL>",
+      "VITE_API_TIMEOUT_MS": "15000",
+      "VITE_IDEMPOTENCY_HEADER": "Idempotency-Key"
+    },
+    "customDomain": "<SET_PRODUCTION_DOMAIN_WHEN_APPROVED>"
+  },
+  "guards": {
+    "neverReuseLegacyProject": "flashcore (prj_uPmglNWLEYCOSj5QY8WvvjJqmE4m)",
+    "neverPointToLegacyBackend": "https://database-management-system-s1g5.onrender.com",
+    "neverDeployWithoutExplicitApproval": true
+  }
+}

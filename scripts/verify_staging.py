@@ -19,8 +19,22 @@ import argparse
 import os
 import sys
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
+
+LEGACY_PROTECTED_HOSTS = {
+    "flashcore-psi.vercel.app",
+    "database-management-system-s1g5.onrender.com",
+}
+
+
+def _assert_not_legacy(url: str) -> None:
+    host = (urlparse(url).hostname or "").lower()
+    if host in LEGACY_PROTECTED_HOSTS:
+        raise RuntimeError(
+            f"Refusing to run staging checks against protected legacy production host: {host}"
+        )
 
 
 def _check_json_get(client: httpx.Client, url: str, expected_status: int = 200) -> dict[str, Any]:
@@ -34,6 +48,7 @@ def _check_json_get(client: httpx.Client, url: str, expected_status: int = 200) 
 
 
 def verify_frontend(frontend_url: str, timeout_s: float) -> None:
+    _assert_not_legacy(frontend_url)
     base = frontend_url.rstrip("/")
     spa_routes = ["/", "/login", "/signup", "/overview", "/refunds", "/payment-links", "/settlements", "/reconciliation", "/orders/test-spa-route"]
     with httpx.Client(timeout=timeout_s, follow_redirects=True) as client:
@@ -49,9 +64,12 @@ def verify_frontend(frontend_url: str, timeout_s: float) -> None:
 
 
 def verify_backend(backend_url: str, timeout_s: float) -> None:
+    _assert_not_legacy(backend_url)
     base = backend_url.rstrip("/")
     with httpx.Client(timeout=timeout_s, follow_redirects=True) as client:
         root = _check_json_get(client, f"{base}/")
+        if "flashcore_postgres_temp" in str(root):
+            raise RuntimeError("Staging backend reported legacy database flashcore_postgres_temp!")
         if root.get("project") != "FLASHCORE" or root.get("status") != "running":
             raise AssertionError(f"Unexpected root payload: {root}")
         print("[PASS] Backend /")

@@ -1,3 +1,15 @@
+# FLASHCORE Staging Infrastructure — Render Blueprint (STAGING ONLY)
+#
+# STRICT ISOLATION:
+# - Targets repository: manasaggarwal1107-ctrl/FLASHCORE (branch: feat/stage-4-financial-operations)
+# - Separate database: flashcore_staging
+# - NEVER reuse legacy academic production:
+#     * Legacy repo: manasaggarwal1107-ctrl/DATABASE-MANAGEMENT-SYSTEM
+#     * Legacy Render service: database-management-system-s1g5.onrender.com
+#     * Legacy database: flashcore_postgres_temp
+# - Separate future production template lives under infra/production/render.production.yaml
+#   and must NOT be placed here so staging Blueprint syncs never trigger production provisioning.
+
 databases:
   - name: flashcore-staging-db
     databaseName: flashcore_staging
