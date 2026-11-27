@@ -602,21 +602,40 @@ def verify_checkout_payment(
         )
 
     if gw_status == "authorized":
-        po.status = "AUTHORIZED"
-        po.updated_at = now
-        order.payment_status = "AUTHORIZED"
-        order.updated_at = now
-        attempt = PaymentAttempt(
-            organisation_id=org_id,
-            payment_order_id=po.id,
-            order_id=order.id,
-            provider=po.provider,
-            provider_payment_id=gw_payment.provider_payment_id,
-            status="AUTHORIZED",
-            signature_verified=True,
+        attempt = db.scalar(
+            select(PaymentAttempt)
+            .where(
+                PaymentAttempt.provider == po.provider,
+                PaymentAttempt.provider_payment_id == gw_payment.provider_payment_id,
+            )
+            .with_for_update()
         )
-        db.add(attempt)
-        db.flush()
+        attempt_existed = attempt is not None
+        if attempt is None:
+            attempt = PaymentAttempt(
+                organisation_id=org_id,
+                payment_order_id=po.id,
+                order_id=order.id,
+                provider=po.provider,
+                provider_payment_id=gw_payment.provider_payment_id,
+                status="AUTHORIZED",
+                signature_verified=True,
+            )
+            db.add(attempt)
+            db.flush()
+        else:
+            if attempt.status != "CAPTURED":
+                attempt.status = "AUTHORIZED"
+            attempt.signature_verified = True
+            attempt.updated_at = now
+
+        if po.status != "CAPTURED":
+            po.status = "AUTHORIZED"
+            po.updated_at = now
+        if order.order_status != "PAID" and order.payment_status != "CAPTURED":
+            order.payment_status = "AUTHORIZED"
+            order.updated_at = now
+
         existing_auth_txn = db.scalar(
             select(PaymentTransaction).where(
                 PaymentTransaction.provider == po.provider,
@@ -624,6 +643,7 @@ def verify_checkout_payment(
                 PaymentTransaction.event_type == "AUTHORIZED",
             )
         )
+        txn_existed = existing_auth_txn is not None
         if existing_auth_txn is None:
             db.add(
                 PaymentTransaction(
@@ -642,6 +662,25 @@ def verify_checkout_payment(
                     metadata_json={"gateway_status": gw_status},
                 )
             )
+
+        is_replay = attempt_existed and txn_existed
+        if not is_replay:
+            db.add(
+                AuditLog(
+                    organisation_id=org_id,
+                    actor_type=org_ctx.membership.role,
+                    actor_ref=org_ctx.user.email,
+                    action="payment_verified_authorized",
+                    entity_name="payment_orders",
+                    entity_id=str(po.id),
+                    details={
+                        "order_id": order.id,
+                        "provider_payment_id": gw_payment.provider_payment_id,
+                        "amount_minor": gw_payment.amount_minor,
+                        "status": "authorized",
+                    },
+                )
+            )
         db.commit()
         return PaymentVerificationOut(
             verified=True,
@@ -654,7 +693,7 @@ def verify_checkout_payment(
             amount_minor=po.amount_minor,
             amount=format_minor_to_decimal_str(po.amount_minor),
             currency=po.currency,
-            idempotent_replay=False,
+            idempotent_replay=is_replay,
         )
 
     # Failed / created / unpaid gateway state: do NOT mark order PAID

@@ -269,3 +269,261 @@ def test_checkout_order_creation_signature_verification_and_cross_tenant_isolati
 
     # Org B cannot see Org A's payment transactions
     assert client.get("/api/v1/payments/transactions", headers=hdrs_b).json()["total"] == 0
+
+
+def _setup_authorized_scenario(client, monkeypatch, suffix: str):
+    u = _signup(client, f"auth-idem-{suffix}@example.com")
+    org_id = _create_org(client, u["access_token"], f"Auth Org {suffix}", f"auth-org-{suffix}")
+    hdrs = _headers(u["access_token"], org_id)
+
+    key_secret = f"rzp_test_sec_{suffix}"
+    wh_secret = f"whsec_auth_{suffix}"
+    cfg = client.put(
+        "/api/v1/payments/accounts/razorpay",
+        headers=hdrs,
+        json={
+            "mode": "test",
+            "key_id": f"rzp_test_key_{suffix}",
+            "key_secret": key_secret,
+            "webhook_secret": wh_secret,
+        },
+    )
+    assert cfg.status_code == 200
+
+    prod = client.post(
+        "/api/v1/products",
+        headers=hdrs,
+        json={"sku": f"AUTH-SKU-{suffix}", "name": "Auth Product", "price_minor": 50000},
+    ).json()
+    client.post(
+        "/api/v1/inventory/adjustments",
+        headers=hdrs,
+        json={"product_id": int(prod["id"]), "quantity_delta": 3, "reason": "Opening"},
+    )
+    order = client.post(
+        "/api/v1/orders",
+        headers=hdrs,
+        json={"items": [{"product_id": int(prod["id"]), "quantity": 1}]},
+    ).json()
+    order_id = int(order["id"])
+
+    gw_state = {"status": "authorized"}
+    rzp_order_id = f"order_rzp_auth_{suffix}"
+    rzp_pay_id = f"pay_rzp_auth_{suffix}"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST" and request.url.path == "/v1/orders":
+            payload = json.loads(request.content.decode("utf-8"))
+            return httpx.Response(
+                200,
+                json={
+                    "id": rzp_order_id,
+                    "amount": payload["amount"],
+                    "currency": "INR",
+                    "receipt": payload["receipt"],
+                    "status": "created",
+                },
+            )
+        if request.method == "GET" and request.url.path == f"/v1/payments/{rzp_pay_id}":
+            return httpx.Response(
+                200,
+                json={
+                    "id": rzp_pay_id,
+                    "order_id": rzp_order_id,
+                    "amount": 50000,
+                    "currency": "INR",
+                    "status": gw_state["status"],
+                    "method": "card",
+                },
+            )
+        return httpx.Response(404)
+
+    monkeypatch.setattr(
+        payment_service,
+        "default_adapter_factory",
+        lambda _p: RazorpayAdapter(transport=httpx.MockTransport(handler)),
+    )
+
+    po = client.post(f"/api/v1/orders/{order_id}/checkout", headers=hdrs).json()
+    sig = _rzp_signature(rzp_order_id, rzp_pay_id, key_secret)
+    return {
+        "hdrs": hdrs,
+        "order_id": order_id,
+        "po_id": po["id"],
+        "rzp_order_id": rzp_order_id,
+        "rzp_pay_id": rzp_pay_id,
+        "sig": sig,
+        "wh_secret": wh_secret,
+        "gw_state": gw_state,
+    }
+
+
+def _webhook_sig(raw_body: bytes, secret: str) -> str:
+    return hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
+
+
+def test_authorized_verification_idempotency_and_capture_transition(
+    client, db_session, monkeypatch
+):
+    ctx = _setup_authorized_scenario(client, monkeypatch, "v1")
+    verify_body = {
+        "razorpay_order_id": ctx["rzp_order_id"],
+        "razorpay_payment_id": ctx["rzp_pay_id"],
+        "razorpay_signature": ctx["sig"],
+    }
+
+    # 1. First authorized verification
+    r1 = client.post(
+        f"/api/v1/payments/orders/{ctx['po_id']}/verify",
+        headers=ctx["hdrs"],
+        json=verify_body,
+    )
+    assert r1.status_code == 200, r1.text
+    assert r1.json()["verified"] is True
+    assert r1.json()["payment_status"] == "AUTHORIZED"
+    assert r1.json()["order_status"] == "PENDING_PAYMENT"
+    assert r1.json()["idempotent_replay"] is False
+
+    # 2. Repeated authorized verification must not hit IntegrityError or duplicate rows
+    r2 = client.post(
+        f"/api/v1/payments/orders/{ctx['po_id']}/verify",
+        headers=ctx["hdrs"],
+        json=verify_body,
+    )
+    assert r2.status_code == 200, r2.text
+    assert r2.json()["idempotent_replay"] is True
+
+    # 4. Checkout verification followed by authorized webhook stays single attempt & single txn
+    auth_wh = json.dumps(
+        {
+            "event": "payment.authorized",
+            "payload": {
+                "payment": {
+                    "entity": {
+                        "id": ctx["rzp_pay_id"],
+                        "order_id": ctx["rzp_order_id"],
+                        "amount": 50000,
+                        "currency": "INR",
+                        "status": "authorized",
+                        "method": "card",
+                    }
+                }
+            },
+        }
+    ).encode("utf-8")
+    wh1 = client.post(
+        "/api/v1/webhooks/razorpay",
+        content=auth_wh,
+        headers={
+            "X-Razorpay-Signature": _webhook_sig(auth_wh, ctx["wh_secret"]),
+            "X-Razorpay-Event-Id": "evt_auth_after_verify_1",
+        },
+    )
+    assert wh1.status_code == 200
+
+    assert (
+        db_session.execute(
+            text("SELECT COUNT(*) FROM payment_attempts WHERE provider_payment_id = :pid"),
+            {"pid": ctx["rzp_pay_id"]},
+        ).scalar_one()
+        == 1
+    )
+    assert (
+        db_session.execute(
+            text(
+                "SELECT COUNT(*) FROM payment_transactions "
+                "WHERE provider_payment_id = :pid AND event_type = 'AUTHORIZED'"
+            ),
+            {"pid": ctx["rzp_pay_id"]},
+        ).scalar_one()
+        == 1
+    )
+
+    # 5. Authorized-to-captured transition preserves single attempt and records CAPTURED txn + PAID order
+    ctx["gw_state"]["status"] = "captured"
+    cap = client.post(
+        f"/api/v1/payments/orders/{ctx['po_id']}/verify",
+        headers=ctx["hdrs"],
+        json=verify_body,
+    )
+    assert cap.status_code == 200, cap.text
+    assert cap.json()["order_status"] == "PAID"
+    assert cap.json()["payment_status"] == "CAPTURED"
+    assert (
+        db_session.execute(
+            text("SELECT status FROM payment_attempts WHERE provider_payment_id = :pid"),
+            {"pid": ctx["rzp_pay_id"]},
+        ).scalar_one()
+        == "CAPTURED"
+    )
+    assert (
+        db_session.execute(
+            text("SELECT COUNT(*) FROM payment_transactions WHERE provider_payment_id = :pid"),
+            {"pid": ctx["rzp_pay_id"]},
+        ).scalar_one()
+        == 2
+    )
+
+
+def test_authorized_webhook_followed_by_checkout_verification_is_idempotent(
+    client, db_session, monkeypatch
+):
+    ctx = _setup_authorized_scenario(client, monkeypatch, "w2v")
+    auth_wh = json.dumps(
+        {
+            "event": "payment.authorized",
+            "payload": {
+                "payment": {
+                    "entity": {
+                        "id": ctx["rzp_pay_id"],
+                        "order_id": ctx["rzp_order_id"],
+                        "amount": 50000,
+                        "currency": "INR",
+                        "status": "authorized",
+                        "method": "card",
+                    }
+                }
+            },
+        }
+    ).encode("utf-8")
+
+    # 3. Authorized webhook arrives first
+    wh = client.post(
+        "/api/v1/webhooks/razorpay",
+        content=auth_wh,
+        headers={
+            "X-Razorpay-Signature": _webhook_sig(auth_wh, ctx["wh_secret"]),
+            "X-Razorpay-Event-Id": "evt_auth_first_1",
+        },
+    )
+    assert wh.status_code == 200
+    assert wh.json()["status"] == "processed"
+
+    # Followed by checkout verification while still authorized
+    v = client.post(
+        f"/api/v1/payments/orders/{ctx['po_id']}/verify",
+        headers=ctx["hdrs"],
+        json={
+            "razorpay_order_id": ctx["rzp_order_id"],
+            "razorpay_payment_id": ctx["rzp_pay_id"],
+            "razorpay_signature": ctx["sig"],
+        },
+    )
+    assert v.status_code == 200, v.text
+    assert v.json()["idempotent_replay"] is True
+    assert v.json()["payment_status"] == "AUTHORIZED"
+
+    assert (
+        db_session.execute(
+            text("SELECT COUNT(*) FROM payment_attempts WHERE provider_payment_id = :pid"),
+            {"pid": ctx["rzp_pay_id"]},
+        ).scalar_one()
+        == 1
+    )
+    assert (
+        db_session.execute(
+            text("SELECT COUNT(*) FROM payment_transactions WHERE provider_payment_id = :pid"),
+            {"pid": ctx["rzp_pay_id"]},
+        ).scalar_one()
+        == 1
+    )
