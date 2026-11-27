@@ -211,6 +211,20 @@ class SettlementImportResponse(BaseModel):
     settlements_created: int
 
 
+class SettlementCsvImportRequest(BaseModel):
+    provider: Literal["razorpay"] = "razorpay"
+    filename: str = Field(min_length=5, max_length=255)
+    csv_content: str = Field(min_length=1, max_length=2_000_000)
+
+    @field_validator("filename")
+    @classmethod
+    def check_csv_filename(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned.lower().endswith(".csv") or "/" in cleaned or "\\" in cleaned:
+            raise ValueError("Statement file must be a valid .csv filename without path separators.")
+        return cleaned
+
+
 class ReconciliationRunCreateRequest(BaseModel):
     provider: Literal["razorpay"] = "razorpay"
     currency: str = Field(default="INR", min_length=3, max_length=3)
