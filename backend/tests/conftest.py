@@ -38,6 +38,12 @@ from main import app
 
 
 TABLES = (
+    "automation_rules, loyalty_ledger, supplier_invoices, purchase_requisitions, "
+    "order_payment_splits, pos_held_bills, pos_shifts, invoices, org_tax_profiles, "
+    "ai_usage_logs, ai_action_proposals, voice_messages, voice_sessions, "
+    "notifications, order_return_items, order_returns, sales_records, "
+    "promotion_redemptions, promotions, surge_campaign_products, surge_campaigns, "
+    "purchase_order_items, purchase_orders, suppliers, stock_transfers, "
     "payment_reconciliation_items, payment_reconciliation_runs, "
     "payment_settlement_items, payment_settlements, payment_statement_imports, "
     "payment_links, payment_refund_events, payment_approval_requests, "

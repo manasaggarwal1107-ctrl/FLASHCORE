@@ -17,18 +17,26 @@ describe('navigation model', () => {
   it('contains all required sections in order', () => {
     expect(allNavItems.map((i) => i.label)).toEqual([
       'Overview',
-      'Products',
-      'Inventory',
-      'Flash Sales',
-      'Orders',
-      'Customers',
+      'POS & Billing',
+      'Voice Intelligence',
       'Catalog',
       'Retail Inventory',
+      'Warehouses',
+      'Procurement',
+      'Orders',
+      'Sales & Invoices',
+      'Surge & Promotions',
+      'Returns',
+      'Customers',
       'Payments',
       'Refunds',
       'Payment Links',
       'Settlements',
       'Reconciliation',
+      'Products',
+      'Inventory',
+      'Flash Sales',
+      'Reports Hub',
       'Analytics',
       'Transaction Monitor',
       'Concurrency Lab',
@@ -46,19 +54,20 @@ describe('navigation model', () => {
     const adminItems = getNavGroupsForRole('admin').flatMap((g) => g.items);
 
     expect(ownerItems.map((i) => i.label)).toEqual(allNavItems.map((i) => i.label));
-    expect(adminItems).toHaveLength(20);
-    expect(analystItems).toHaveLength(19);
+    expect(adminItems).toHaveLength(28);
+    expect(analystItems).toHaveLength(26);
     expect(analystItems.some((i) => i.label === 'Audit Logs')).toBe(false);
-    expect(operatorItems).toHaveLength(16);
+    expect(analystItems.some((i) => i.label === 'POS & Billing')).toBe(false);
+    expect(operatorItems).toHaveLength(22);
     expect(operatorItems.some((i) => i.label === 'Overview')).toBe(false);
     expect(operatorItems.some((i) => i.label === 'Analytics')).toBe(false);
     expect(operatorItems.some((i) => i.label === 'Data Imports')).toBe(false);
     expect(operatorItems.some((i) => i.label === 'Audit Logs')).toBe(false);
   });
   it('filters by label and keyword', () => {
-    expect(filterNavItems('flash').map((i) => i.label)).toEqual(['Flash Sales']);
-    expect(filterNavItems('csv').map((i) => i.label)).toEqual(['Data Imports']);
-    expect(filterNavItems('')).toHaveLength(20);
+    expect(filterNavItems('flash').map((i) => i.label)).toEqual(['Surge & Promotions', 'Flash Sales']);
+    expect(filterNavItems('csv').map((i) => i.label)).toEqual(['Reports Hub', 'Data Imports']);
+    expect(filterNavItems('')).toHaveLength(28);
     expect(filterNavItems('zzz')).toHaveLength(0);
   });
 });
