@@ -8,6 +8,8 @@ from app.core.database import DATABASE_URL, Base, engine
 # and ignores legacy unmounted models in app.models.commerce / app.models.flash_sale.
 import app.models.auth  # noqa: F401
 import app.models.organisation  # noqa: F401
+import app.models.payments  # noqa: F401
+import app.models.retail  # noqa: F401
 import app.models.rossmann  # noqa: F401
 import app.models.simulation  # noqa: F401
 

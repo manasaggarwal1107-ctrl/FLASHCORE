@@ -14,7 +14,7 @@ import { allNavItems, getNavGroupsForRole } from './nav';
 beforeEach(() => resetConnectivity());
 
 describe('navigation model', () => {
-  it('contains exactly the 13 required sections in order', () => {
+  it('contains all required sections in order', () => {
     expect(allNavItems.map((i) => i.label)).toEqual([
       'Overview',
       'Products',
@@ -22,6 +22,9 @@ describe('navigation model', () => {
       'Flash Sales',
       'Orders',
       'Customers',
+      'Catalog',
+      'Retail Inventory',
+      'Payments',
       'Analytics',
       'Transaction Monitor',
       'Concurrency Lab',
@@ -39,10 +42,10 @@ describe('navigation model', () => {
     const adminItems = getNavGroupsForRole('admin').flatMap((g) => g.items);
 
     expect(ownerItems.map((i) => i.label)).toEqual(allNavItems.map((i) => i.label));
-    expect(adminItems).toHaveLength(13);
-    expect(analystItems).toHaveLength(12);
+    expect(adminItems).toHaveLength(16);
+    expect(analystItems).toHaveLength(15);
     expect(analystItems.some((i) => i.label === 'Audit Logs')).toBe(false);
-    expect(operatorItems).toHaveLength(9);
+    expect(operatorItems).toHaveLength(12);
     expect(operatorItems.some((i) => i.label === 'Overview')).toBe(false);
     expect(operatorItems.some((i) => i.label === 'Analytics')).toBe(false);
     expect(operatorItems.some((i) => i.label === 'Data Imports')).toBe(false);
@@ -51,7 +54,7 @@ describe('navigation model', () => {
   it('filters by label and keyword', () => {
     expect(filterNavItems('flash').map((i) => i.label)).toEqual(['Flash Sales']);
     expect(filterNavItems('csv').map((i) => i.label)).toEqual(['Data Imports']);
-    expect(filterNavItems('')).toHaveLength(13);
+    expect(filterNavItems('')).toHaveLength(16);
     expect(filterNavItems('zzz')).toHaveLength(0);
   });
 });

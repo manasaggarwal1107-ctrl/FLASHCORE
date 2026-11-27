@@ -1,0 +1,114 @@
+name: FLASHCORE CI
+
+on:
+  push:
+    branches:
+      - main
+      - "feat/**"
+  pull_request:
+    branches:
+      - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-test:
+    name: Backend Migrations & Pytest (flashcore_test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: flashcore_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci_isolated_test_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d flashcore_test"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+
+    env:
+      DB_HOST: 127.0.0.1
+      DB_PORT: "5432"
+      DB_NAME: flashcore_test
+      DB_USER: postgres
+      DB_PASSWORD: ci_isolated_test_password
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install backend dependencies
+        run: python -m pip install --upgrade pip && pip install -r requirements.txt
+
+      - name: Generate ephemeral CI test secrets
+        run: |
+          python - <<'PY'
+          import base64, os, secrets
+          jwt_key = secrets.token_urlsafe(40)
+          enc_key = base64.urlsafe_b64encode(os.urandom(32)).decode("ascii")
+          print(f"::add-mask::{jwt_key}")
+          print(f"::add-mask::{enc_key}")
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as f:
+              f.write(f"JWT_SECRET_KEY={jwt_key}\n")
+              f.write(f"FLASHCORE_CREDENTIAL_ENCRYPTION_KEY={enc_key}\n")
+          PY
+
+      - name: Apply Alembic migrations and verify schema alignment
+        run: |
+          alembic upgrade head
+          alembic check
+
+      - name: Run isolated backend test suite
+        run: python -m pytest -v
+
+  frontend-verify:
+    name: Frontend Typecheck, Lint, Vitest & Temp Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Typecheck TypeScript
+        run: npm run typecheck
+
+      - name: Run ESLint
+        run: npm run lint
+
+      - name: Run Vitest suite
+        run: npm test
+
+      - name: Verify Vite production build in temporary directory
+        run: |
+          npx vite build --outDir .tmp-dist-verify
+          rm -rf .tmp-dist-verify

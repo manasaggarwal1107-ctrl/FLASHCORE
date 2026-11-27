@@ -9,10 +9,16 @@ from sqlalchemy import text
 from app.core.database import engine
 from app.routes.admin import router as admin_router
 from app.routes.auth import router as auth_router
+from app.routes.catalog import router as catalog_router
+from app.routes.customers import router as customers_router
 from app.routes.imports import router as imports_router
+from app.routes.inventory import router as inventory_router
+from app.routes.orders import router as orders_router
 from app.routes.organisations import router as organisations_router
+from app.routes.payments import router as payments_router
 from app.routes.rossmann import router as rossmann_router
 from app.routes.simulation import router as simulation_router
+from app.routes.webhooks import router as webhooks_router
 
 app = FastAPI(
     title="FLASHCORE",
@@ -53,6 +59,12 @@ app.include_router(admin_router)
 app.include_router(rossmann_router)
 app.include_router(simulation_router)
 app.include_router(imports_router)
+app.include_router(catalog_router)
+app.include_router(inventory_router)
+app.include_router(customers_router)
+app.include_router(orders_router)
+app.include_router(payments_router)
+app.include_router(webhooks_router)
 
 
 @app.get("/")

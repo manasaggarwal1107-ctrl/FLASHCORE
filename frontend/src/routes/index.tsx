@@ -71,6 +71,27 @@ export const router = createBrowserRouter([
       },
 
       {
+        path: 'catalog',
+        element: page(
+          () => import('@/features/catalog/CatalogPage'),
+          'CatalogPage',
+        ),
+      },
+      {
+        path: 'retail-inventory',
+        element: page(
+          () => import('@/features/catalog/RetailInventoryPage'),
+          'RetailInventoryPage',
+        ),
+      },
+      {
+        path: 'payments',
+        element: page(
+          () => import('@/features/payments/PaymentsPage'),
+          'PaymentsPage',
+        ),
+      },
+      {
         path: 'products',
         element: page(
           () => import('@/features/products/ProductsPage'),

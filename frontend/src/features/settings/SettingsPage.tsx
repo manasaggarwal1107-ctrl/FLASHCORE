@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/Badge';
 import { FormField, Input } from '@/components/ui/Field';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Panel, PanelBody, PanelHeader } from '@/components/ui/Panel';
+import { GatewaySettingsPanel } from '@/features/payments/GatewaySettingsPanel';
 import { DetailList } from '@/features/shared/DetailList';
 import { useAuthToken } from '@/hooks/useAuthToken';
 import { config } from '@/lib/config';
@@ -84,6 +85,10 @@ export function SettingsPage() {
             />
           </PanelBody>
         </Panel>
+      </div>
+
+      <div className="mt-4">
+        <GatewaySettingsPanel />
       </div>
     </div>
   );

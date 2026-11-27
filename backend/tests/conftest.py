@@ -1,7 +1,15 @@
+import base64
+import hashlib
 import os
 
 # Force the isolated test database before importing the application.
 os.environ["DB_NAME"] = "flashcore_test"
+os.environ.setdefault(
+    "FLASHCORE_CREDENTIAL_ENCRYPTION_KEY",
+    base64.urlsafe_b64encode(
+        hashlib.sha256(b"flashcore-isolated-test-suite-credential-key").digest()
+    ).decode("ascii"),
+)
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -30,6 +38,10 @@ from main import app
 
 
 TABLES = (
+    "payment_webhook_events, payment_transactions, payment_attempts, "
+    "payment_orders, payment_provider_accounts, "
+    "order_events, inventory_reservations, order_items, orders, customers, "
+    "inventory_movements, inventory_balances, inventory_locations, commerce_products, "
     "auth_sessions, organisation_memberships, users, "
     "audit_logs, "
     "transactions_log, "
