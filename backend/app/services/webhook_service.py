@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.models.finance import PaymentRefund, PaymentRefundEvent
 from app.models.payments import (
     PaymentAttempt,
     PaymentOrder,
@@ -14,6 +15,7 @@ from app.models.payments import (
     PaymentTransaction,
     PaymentWebhookEvent,
 )
+from app.services.payments.razorpay_adapter import normalize_razorpay_refund_status
 from app.models.retail import Order, OrderEvent
 from app.models.rossmann import AuditLog
 from app.services.payment_service import (
@@ -186,6 +188,214 @@ def _upsert_non_capture_attempt_and_txn(
         )
 
 
+def _process_razorpay_refund_webhook(
+    db: Session,
+    *,
+    payload: dict,
+    raw_body: bytes,
+    signature: str,
+    header_event_id: str | None,
+    event_type: str,
+    payload_hash: str,
+) -> dict:
+    inner = payload.get("payload") or {}
+    refund_entity = (inner.get("refund") or {}).get("entity")
+    if not isinstance(refund_entity, dict):
+        raise HTTPException(
+            status_code=400, detail="Webhook payload missing refund entity."
+        )
+
+    raw_refund_id = refund_entity.get("id")
+    raw_payment_id = refund_entity.get("payment_id")
+    if not isinstance(raw_refund_id, str) or not raw_refund_id.strip():
+        raise HTTPException(status_code=400, detail="Webhook missing refund ID.")
+    provider_refund_id = raw_refund_id.strip()
+    provider_payment_id = (
+        raw_payment_id.strip()
+        if isinstance(raw_payment_id, str) and raw_payment_id.strip()
+        else None
+    )
+
+    refund = db.scalar(
+        select(PaymentRefund)
+        .where(
+            PaymentRefund.provider == "razorpay",
+            PaymentRefund.provider_refund_id == provider_refund_id,
+        )
+        .with_for_update()
+    )
+    if refund is None:
+        raise HTTPException(status_code=404, detail="Unknown refund for webhook.")
+
+    po = db.get(PaymentOrder, refund.payment_order_id)
+    account = (
+        db.get(PaymentProviderAccount, po.provider_account_id)
+        if po is not None
+        else None
+    )
+    if account is None:
+        raise HTTPException(
+            status_code=404, detail="Gateway account for refund not found."
+        )
+
+    provider_event_id = (
+        header_event_id.strip()[:120]
+        if header_event_id and header_event_id.strip()
+        else hashlib.sha256(
+            f"{event_type}:{provider_refund_id}:{payload_hash[:12]}".encode("utf-8")
+        ).hexdigest()[:64]
+    )
+    sanitized = {
+        "event": event_type,
+        "provider_refund_id": provider_refund_id,
+        "provider_payment_id": provider_payment_id,
+        "amount": refund_entity.get("amount"),
+        "currency": refund_entity.get("currency"),
+        "status": refund_entity.get("status"),
+    }
+
+    creds = _decrypt_credentials(account)
+    adapter = default_adapter_factory("razorpay")
+    now = datetime.now(timezone.utc)
+    if not adapter.verify_webhook(raw_body, signature, creds.webhook_secret):
+        existing_rej = db.scalar(
+            select(PaymentWebhookEvent).where(
+                PaymentWebhookEvent.provider == "razorpay",
+                PaymentWebhookEvent.provider_event_id == provider_event_id,
+            )
+        )
+        if existing_rej is None:
+            db.add(
+                PaymentWebhookEvent(
+                    organisation_id=refund.organisation_id,
+                    provider_account_id=account.id,
+                    provider="razorpay",
+                    provider_event_id=provider_event_id,
+                    event_type=event_type,
+                    provider_order_id=po.provider_order_id if po else None,
+                    provider_payment_id=provider_payment_id,
+                    signature_valid=False,
+                    processing_status="rejected_signature",
+                    payload_hash=payload_hash,
+                    sanitized_summary=sanitized,
+                    error_message="Invalid X-Razorpay-Signature",
+                    processed_at=now,
+                )
+            )
+            db.commit()
+        raise HTTPException(status_code=401, detail="Invalid webhook signature.")
+
+    existing_event = db.scalar(
+        select(PaymentWebhookEvent)
+        .where(
+            PaymentWebhookEvent.provider == "razorpay",
+            PaymentWebhookEvent.provider_event_id == provider_event_id,
+        )
+        .with_for_update()
+    )
+    if existing_event is not None:
+        if existing_event.processing_status == "failed":
+            raise HTTPException(
+                status_code=422,
+                detail=existing_event.error_message
+                or "Malformed refund webhook payload.",
+            )
+        return {
+            "status": "ignored_duplicate",
+            "event_type": event_type,
+            "provider_event_id": provider_event_id,
+        }
+
+    event_row = PaymentWebhookEvent(
+        organisation_id=refund.organisation_id,
+        provider_account_id=account.id,
+        provider="razorpay",
+        provider_event_id=provider_event_id,
+        event_type=event_type,
+        provider_order_id=po.provider_order_id if po else None,
+        provider_payment_id=provider_payment_id,
+        signature_valid=True,
+        processing_status="received",
+        payload_hash=payload_hash,
+        sanitized_summary=sanitized,
+    )
+    db.add(event_row)
+    db.flush()
+
+    raw_amount = refund_entity.get("amount")
+    raw_currency = refund_entity.get("currency")
+    if (
+        isinstance(raw_amount, bool)
+        or not isinstance(raw_amount, int)
+        or raw_amount <= 0
+        or not isinstance(raw_currency, str)
+        or raw_amount != refund.amount_minor
+        or raw_currency.strip().upper() != refund.currency.upper()
+    ):
+        err_msg = "Refund webhook amount or currency is missing, malformed, or mismatched."
+        event_row.processing_status = "failed"
+        event_row.error_message = err_msg
+        event_row.processed_at = now
+        db.commit()
+        raise HTTPException(status_code=422, detail=err_msg)
+
+    target_status = normalize_razorpay_refund_status(
+        refund_entity.get("status")
+        or (
+            "processed"
+            if event_type == "refund.processed"
+            else "failed"
+            if event_type == "refund.failed"
+            else "pending"
+        )
+    )
+    prev_status = refund.status
+    if prev_status == "PROCESSED" and target_status != "PROCESSED":
+        event_row.processing_status = "ignored_out_of_order"
+    else:
+        refund.status = target_status
+        refund.provider_status = str(refund_entity.get("status") or target_status.lower())
+        if target_status == "PROCESSED" and refund.processed_at is None:
+            refund.processed_at = now
+        refund.updated_at = now
+        db.add(
+            PaymentRefundEvent(
+                organisation_id=refund.organisation_id,
+                refund_id=refund.id,
+                from_status=prev_status,
+                to_status=target_status,
+                event_type=f"webhook_{event_type}",
+                source="webhook",
+                actor_ref="webhook:razorpay",
+                details={"provider_event_id": provider_event_id},
+            )
+        )
+        event_row.processing_status = "processed"
+
+    event_row.processed_at = now
+    db.add(
+        AuditLog(
+            organisation_id=refund.organisation_id,
+            actor_type="webhook",
+            actor_ref="razorpay",
+            action=f"webhook_{event_type}",
+            entity_name="payment_refunds",
+            entity_id=str(refund.id),
+            details={
+                "provider_event_id": provider_event_id,
+                "processing_status": event_row.processing_status,
+                "provider_refund_id": provider_refund_id,
+            },
+        )
+    )
+    db.commit()
+    return {
+        "status": event_row.processing_status,
+        "event_type": event_type,
+        "provider_event_id": provider_event_id,
+    }
+
+
 def process_razorpay_webhook(
     db: Session,
     *,
@@ -208,6 +418,18 @@ def process_razorpay_webhook(
 
     event_type = str(payload["event"]).strip()
     payload_hash = hashlib.sha256(raw_body).hexdigest()
+
+    if event_type.startswith("refund."):
+        return _process_razorpay_refund_webhook(
+            db,
+            payload=payload,
+            raw_body=raw_body,
+            signature=signature,
+            header_event_id=header_event_id,
+            event_type=event_type,
+            payload_hash=payload_hash,
+        )
+
     provider_order_id, payment_entity, _ = _extract_entities(payload)
     provider_payment_id = (
         str(payment_entity["id"])

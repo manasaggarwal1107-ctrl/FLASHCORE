@@ -11,6 +11,7 @@ from app.routes.admin import router as admin_router
 from app.routes.auth import router as auth_router
 from app.routes.catalog import router as catalog_router
 from app.routes.customers import router as customers_router
+from app.routes.finance import router as finance_router
 from app.routes.imports import router as imports_router
 from app.routes.inventory import router as inventory_router
 from app.routes.orders import router as orders_router
@@ -64,6 +65,7 @@ app.include_router(inventory_router)
 app.include_router(customers_router)
 app.include_router(orders_router)
 app.include_router(payments_router)
+app.include_router(finance_router)
 app.include_router(webhooks_router)
 
 
