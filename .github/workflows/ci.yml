@@ -76,7 +76,7 @@ jobs:
           alembic check
 
       - name: Run isolated backend test suite
-        run: pytest -v
+        run: python -m pytest -v
 
   frontend-verify:
     name: Frontend Typecheck, Lint, Vitest & Temp Build
