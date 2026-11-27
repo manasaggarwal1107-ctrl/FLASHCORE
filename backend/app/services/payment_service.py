@@ -539,12 +539,31 @@ def verify_checkout_payment(
         ) from exc
 
     if (
-        gw_payment.provider_order_id is not None
-        and gw_payment.provider_order_id != po.provider_order_id
+        not isinstance(gw_payment.provider_order_id, str)
+        or not gw_payment.provider_order_id.strip()
+        or gw_payment.provider_order_id.strip() != po.provider_order_id
     ):
+        db.add(
+            AuditLog(
+                organisation_id=org_id,
+                actor_type=org_ctx.membership.role,
+                actor_ref=org_ctx.user.email,
+                action="payment_order_linkage_rejected",
+                entity_name="payment_orders",
+                entity_id=str(po.id),
+                details={
+                    "order_id": order.id,
+                    "expected_provider_order_id": po.provider_order_id,
+                    "gateway_provider_order_id": gw_payment.provider_order_id,
+                    "provider_payment_id": gw_payment.provider_payment_id,
+                    "status": "rejected",
+                },
+            )
+        )
+        db.commit()
         raise HTTPException(
             status_code=409,
-            detail="Payment does not belong to the expected gateway order.",
+            detail="Gateway payment order reference is missing or does not match the expected payment order.",
         )
 
     if gw_payment.amount_minor != po.amount_minor or gw_payment.currency.upper() != po.currency.upper():

@@ -527,3 +527,97 @@ def test_authorized_webhook_followed_by_checkout_verification_is_idempotent(
         ).scalar_one()
         == 1
     )
+
+
+def test_checkout_verification_enforces_exact_gateway_order_linkage(
+    client, db_session, monkeypatch
+):
+    ctx = _setup_authorized_scenario(client, monkeypatch, "linkage")
+    # Also adjust mock handler so test can toggle gateway order_id between None, mismatch, and exact match
+    gw_order_mode = {"value": None}
+
+    def linkage_handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET" and request.url.path == f"/v1/payments/{ctx['rzp_pay_id']}":
+            return httpx.Response(
+                200,
+                json={
+                    "id": ctx["rzp_pay_id"],
+                    "order_id": gw_order_mode["value"],
+                    "amount": 50000,
+                    "currency": "INR",
+                    "status": "captured",
+                    "method": "upi",
+                },
+            )
+        return httpx.Response(404)
+
+    monkeypatch.setattr(
+        payment_service,
+        "default_adapter_factory",
+        lambda _p: RazorpayAdapter(transport=httpx.MockTransport(linkage_handler)),
+    )
+
+    verify_payload = {
+        "razorpay_order_id": ctx["rzp_order_id"],
+        "razorpay_payment_id": ctx["rzp_pay_id"],
+        "razorpay_signature": ctx["sig"],
+    }
+
+    # 1. Missing gateway order_id (None) must reject with 409, never mark paid or confirm stock
+    gw_order_mode["value"] = None
+    missing_resp = client.post(
+        f"/api/v1/payments/orders/{ctx['po_id']}/verify",
+        headers=ctx["hdrs"],
+        json=verify_payload,
+    )
+    assert missing_resp.status_code == 409
+
+    # 2. Mismatched gateway order_id must reject with 409
+    gw_order_mode["value"] = "order_rzp_wrong_target"
+    mismatch_resp = client.post(
+        f"/api/v1/payments/orders/{ctx['po_id']}/verify",
+        headers=ctx["hdrs"],
+        json=verify_payload,
+    )
+    assert mismatch_resp.status_code == 409
+
+    # Confirm order still PENDING_PAYMENT, reservation untouched, 0 txns, 2 audit rejections recorded
+    ord_mid = client.get(f"/api/v1/orders/{ctx['order_id']}", headers=ctx["hdrs"]).json()
+    assert ord_mid["status"] == "PENDING_PAYMENT"
+    assert ord_mid["payment_status"] == "CREATED"
+    inv_mid = client.get("/api/v1/inventory", headers=ctx["hdrs"]).json()["items"][0]
+    assert inv_mid["on_hand"] == 3
+    assert inv_mid["reserved"] == 1
+    assert inv_mid["available"] == 2
+    assert (
+        db_session.execute(
+            text("SELECT COUNT(*) FROM payment_transactions WHERE order_id = :oid"),
+            {"oid": ctx["order_id"]},
+        ).scalar_one()
+        == 0
+    )
+    audit_rows = db_session.execute(
+        text(
+            "SELECT action, details::text FROM audit_logs "
+            "WHERE action = 'payment_order_linkage_rejected'"
+        )
+    ).all()
+    assert len(audit_rows) == 2
+    for row in audit_rows:
+        assert "rzp_test_sec" not in row[1]
+        assert "whsec_" not in row[1]
+
+    # 3. Exact matching gateway order_id captures cleanly and confirms inventory reservation
+    gw_order_mode["value"] = ctx["rzp_order_id"]
+    ok_resp = client.post(
+        f"/api/v1/payments/orders/{ctx['po_id']}/verify",
+        headers=ctx["hdrs"],
+        json=verify_payload,
+    )
+    assert ok_resp.status_code == 200, ok_resp.text
+    assert ok_resp.json()["order_status"] == "PAID"
+    assert ok_resp.json()["payment_status"] == "CAPTURED"
+    inv_after = client.get("/api/v1/inventory", headers=ctx["hdrs"]).json()["items"][0]
+    assert inv_after["on_hand"] == 2
+    assert inv_after["reserved"] == 0
+    assert inv_after["available"] == 2
