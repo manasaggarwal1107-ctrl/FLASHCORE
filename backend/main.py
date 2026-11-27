@@ -9,16 +9,21 @@ from sqlalchemy import text
 from app.core.database import engine
 from app.routes.admin import router as admin_router
 from app.routes.auth import router as auth_router
+from app.routes.campaigns import router as campaigns_router
 from app.routes.catalog import router as catalog_router
 from app.routes.customers import router as customers_router
 from app.routes.finance import router as finance_router
 from app.routes.imports import router as imports_router
+from app.routes.india_pos import router as india_pos_router
 from app.routes.inventory import router as inventory_router
+from app.routes.inventory_ops import router as inventory_ops_router
+from app.routes.operations import router as operations_router
 from app.routes.orders import router as orders_router
 from app.routes.organisations import router as organisations_router
 from app.routes.payments import router as payments_router
 from app.routes.rossmann import router as rossmann_router
 from app.routes.simulation import router as simulation_router
+from app.routes.voice import router as voice_router
 from app.routes.webhooks import router as webhooks_router
 
 app = FastAPI(
@@ -56,7 +61,7 @@ app.add_middleware(
     ],
 )
 
-EXPECTED_ALEMBIC_REVISION = "0004_financial_operations"
+EXPECTED_ALEMBIC_REVISION = "0006_india_pos_gst_crm_ops"
 
 
 def _runtime_environment() -> str:
@@ -96,6 +101,11 @@ app.include_router(orders_router)
 app.include_router(payments_router)
 app.include_router(finance_router)
 app.include_router(webhooks_router)
+app.include_router(inventory_ops_router)
+app.include_router(campaigns_router)
+app.include_router(operations_router)
+app.include_router(voice_router)
+app.include_router(india_pos_router)
 
 
 @app.get("/")

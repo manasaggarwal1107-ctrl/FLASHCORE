@@ -370,6 +370,9 @@ def _submit_refund_to_gateway(
     refund.status = gw_res.status
     if gw_res.status == "PROCESSED":
         refund.processed_at = done_now
+        from app.services import sales_service
+
+        sales_service.sync_refund_to_sales_record(db, refund.organisation_id, refund.order_id)
     refund.updated_at = done_now
 
     db.add(
@@ -832,6 +835,10 @@ def sync_refund(
     refund.provider_payload = _sanitize_gateway_payload(gw_res.raw_payload)
     if refund.status == "PROCESSED" and refund.processed_at is None:
         refund.processed_at = now
+    if refund.status == "PROCESSED":
+        from app.services import sales_service
+
+        sales_service.sync_refund_to_sales_record(db, org_id, refund.order_id)
     refund.updated_at = now
 
     db.add(

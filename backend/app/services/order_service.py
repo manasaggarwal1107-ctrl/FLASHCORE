@@ -6,6 +6,11 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.auth_dependencies import OrgContext
+from app.models.campaigns import (
+    PromotionRedemption,
+    SurgeCampaign,
+    SurgeCampaignProduct,
+)
 from app.models.payments import PaymentTransaction
 from app.models.retail import (
     CommerceProduct,
@@ -24,7 +29,7 @@ from app.schemas.retail import (
     OrderTransitionRequest,
     format_minor_to_decimal_str,
 )
-from app.services import inventory_service
+from app.services import campaign_service, inventory_service
 
 VALID_ORDER_TRANSITIONS: dict[str, set[str]] = {
     "DRAFT": {"PENDING_PAYMENT", "CANCELLED", "EXPIRED"},
@@ -194,9 +199,12 @@ def create_order(
                 )
                 for item in payload.items
             )
+            req_coupon = payload.coupon_code.strip().upper() if payload.coupon_code else None
             if (
                 existing.customer_id != payload.customer_id
-                or existing.discount_minor != payload.discount_minor
+                or existing.campaign_id != payload.campaign_id
+                or existing.coupon_code != req_coupon
+                or (req_coupon is None and existing.discount_minor != payload.discount_minor)
                 or existing_sig != req_sig
             ):
                 raise HTTPException(
@@ -276,10 +284,80 @@ def create_order(
                 detail="One or more active inventory locations were not found.",
             )
 
+    now = datetime.now(timezone.utc)
+    campaign: SurgeCampaign | None = None
+    campaign_products_map: dict[int, SurgeCampaignProduct] = {}
+    if payload.campaign_id is not None:
+        campaign = db.scalar(
+            select(SurgeCampaign)
+            .where(
+                SurgeCampaign.id == payload.campaign_id,
+                SurgeCampaign.organisation_id == org_id,
+            )
+            .with_for_update()
+        )
+        if campaign is None:
+            raise HTTPException(status_code=404, detail="Surge campaign not found.")
+        campaign_service._sync_campaign_expiry(campaign, now)
+        if campaign.status != "ACTIVE" or not (campaign.starts_at <= now < campaign.ends_at):
+            raise HTTPException(
+                status_code=409,
+                detail=f"Campaign '{campaign.name}' is not currently active.",
+            )
+        cp_rows = list(
+            db.scalars(
+                select(SurgeCampaignProduct)
+                .where(
+                    SurgeCampaignProduct.campaign_id == campaign.id,
+                    SurgeCampaignProduct.product_id.in_(product_ids),
+                )
+                .order_by(SurgeCampaignProduct.product_id.asc())
+                .with_for_update()
+            ).all()
+        )
+        campaign_products_map = {cp.product_id: cp for cp in cp_rows}
+        if len(campaign_products_map) != len(product_ids):
+            raise HTTPException(
+                status_code=409,
+                detail="One or more products are not part of the specified campaign.",
+            )
+
+        requested_total_units = sum(item.quantity for item in payload.items)
+        if (
+            campaign.campaign_limit_units is not None
+            and campaign.total_units_sold + requested_total_units > campaign.campaign_limit_units
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="Campaign unit limit reached.",
+            )
+
+        if campaign.per_customer_limit is not None and payload.customer_id is not None:
+            prior_units = int(
+                db.scalar(
+                    select(func.coalesce(func.sum(OrderItem.quantity), 0))
+                    .join(Order, Order.id == OrderItem.order_id)
+                    .where(
+                        Order.organisation_id == org_id,
+                        Order.campaign_id == campaign.id,
+                        Order.customer_id == payload.customer_id,
+                        Order.order_status.notin_(("CANCELLED", "EXPIRED")),
+                    )
+                )
+                or 0
+            )
+            if prior_units + requested_total_units > campaign.per_customer_limit:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Per-customer campaign limit exceeded.",
+                )
+
     subtotal_minor = 0
     tax_minor = 0
-    resolved_lines: list[tuple[CommerceProduct, int, int, int, int]] = []
+    resolved_lines: list[tuple[CommerceProduct, int, int, int, int, int]] = []
 
+    # Track per-product quantities inside this order against campaign product limit
+    campaign_qty_by_product: dict[int, int] = {}
     for item in payload.items:
         product = products[item.product_id]
         if item.location_id is not None:
@@ -291,22 +369,47 @@ def create_order(
                 )
             loc_id = default_location.id
 
-        line_sub = product.price_minor * item.quantity
+        unit_price = product.price_minor
+        if campaign is not None:
+            cp = campaign_products_map[product.id]
+            new_qty_for_prod = campaign_qty_by_product.get(product.id, 0) + item.quantity
+            if cp.sold_units + new_qty_for_prod > cp.allocated_units:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Insufficient surge campaign allocation for SKU {product.sku}.",
+                )
+            campaign_qty_by_product[product.id] = new_qty_for_prod
+            unit_price = cp.sale_price_minor
+
+        line_sub = unit_price * item.quantity
         line_tax = (line_sub * product.tax_rate_bps) // 10000
         line_total = line_sub + line_tax
         subtotal_minor += line_sub
         tax_minor += line_tax
-        resolved_lines.append((product, loc_id, item.quantity, line_tax, line_total))
+        resolved_lines.append((product, loc_id, item.quantity, unit_price, line_tax, line_total))
 
+    coupon_promo = None
+    coupon_discount_minor = 0
+    cleaned_coupon = payload.coupon_code.strip().upper() if payload.coupon_code else None
+    if cleaned_coupon:
+        coupon_promo, coupon_discount_minor = campaign_service.compute_coupon_discount(
+            db,
+            org_id,
+            cleaned_coupon,
+            subtotal_minor,
+            payload.customer_id,
+            lock_row=True,
+        )
+
+    effective_discount_minor = payload.discount_minor + coupon_discount_minor
     gross_total = subtotal_minor + tax_minor
-    if payload.discount_minor > gross_total:
+    if effective_discount_minor > gross_total:
         raise HTTPException(
             status_code=422,
             detail="Discount cannot exceed order subtotal plus tax.",
         )
-    total_minor = gross_total - payload.discount_minor
+    total_minor = gross_total - effective_discount_minor
 
-    now = datetime.now(timezone.utc)
     expires_at = now + timedelta(minutes=payload.reservation_ttl_minutes)
     initial_status = "PENDING_PAYMENT" if payload.submit_for_payment else "DRAFT"
 
@@ -317,20 +420,45 @@ def create_order(
         idempotency_key=cleaned_key,
         currency=currency,
         subtotal_minor=subtotal_minor,
-        discount_minor=payload.discount_minor,
+        discount_minor=effective_discount_minor,
         tax_minor=tax_minor,
         total_minor=total_minor,
         order_status=initial_status,
         payment_status="UNPAID",
         customer_snapshot=customer_snapshot,
+        coupon_code=cleaned_coupon,
+        promotion_id=coupon_promo.id if coupon_promo else None,
+        campaign_id=campaign.id if campaign else None,
         reservation_expires_at=expires_at if payload.submit_for_payment else None,
         placed_at=now,
     )
     db.add(order)
     db.flush()
 
+    if campaign is not None:
+        total_units_added = 0
+        for prod_id, qty_added in campaign_qty_by_product.items():
+            cp = campaign_products_map[prod_id]
+            cp.sold_units += qty_added
+            total_units_added += qty_added
+        campaign.total_units_sold += total_units_added
+        campaign.updated_at = now
+
+    if coupon_promo is not None:
+        coupon_promo.used_count += 1
+        coupon_promo.updated_at = now
+        db.add(
+            PromotionRedemption(
+                organisation_id=org_id,
+                promotion_id=coupon_promo.id,
+                order_id=order.id,
+                customer_id=order.customer_id,
+                discount_minor=coupon_discount_minor,
+            )
+        )
+
     allocations: list[tuple[int, int, int, int]] = []
-    for product, loc_id, qty, line_tax, line_total in resolved_lines:
+    for product, loc_id, qty, unit_price, line_tax, line_total in resolved_lines:
         order_item = OrderItem(
             organisation_id=org_id,
             order_id=order.id,
@@ -338,7 +466,7 @@ def create_order(
             location_id=loc_id,
             sku_snapshot=product.sku,
             name_snapshot=product.name,
-            unit_price_minor=product.price_minor,
+            unit_price_minor=unit_price,
             tax_rate_bps=product.tax_rate_bps,
             quantity=qty,
             tax_minor=line_tax,
@@ -504,6 +632,34 @@ def transition_order(
             actor_ref=org_ctx.user.email,
             reason=payload.reason or "Order cancelled",
         )
+        if order.campaign_id is not None:
+            campaign = db.scalar(
+                select(SurgeCampaign)
+                .where(SurgeCampaign.id == order.campaign_id)
+                .with_for_update()
+            )
+            order_lines = list(
+                db.scalars(
+                    select(OrderItem).where(OrderItem.order_id == order.id)
+                ).all()
+            )
+            if campaign is not None and order_lines:
+                cp_rows = {
+                    cp.product_id: cp
+                    for cp in db.scalars(
+                        select(SurgeCampaignProduct)
+                        .where(SurgeCampaignProduct.campaign_id == campaign.id)
+                        .with_for_update()
+                    ).all()
+                }
+                released_total = 0
+                for ol in order_lines:
+                    cp = cp_rows.get(ol.product_id)
+                    if cp is not None:
+                        dec = min(cp.sold_units, ol.quantity)
+                        cp.sold_units -= dec
+                        released_total += dec
+                campaign.total_units_sold = max(0, campaign.total_units_sold - released_total)
         if order.payment_status in ("UNPAID", "CREATED", "PENDING"):
             order.payment_status = "CANCELLED"
 

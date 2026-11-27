@@ -13,6 +13,7 @@ def format_minor_to_decimal_str(amount_minor: int) -> str:
 class InventorySummaryOut(BaseModel):
     on_hand: int
     reserved: int
+    damaged: int = 0
     sold: int
     available: int
     low_stock_threshold: int | None = None
@@ -20,13 +21,23 @@ class InventorySummaryOut(BaseModel):
 
 class CommerceProductCreate(BaseModel):
     sku: str = Field(min_length=1, max_length=80)
+    barcode: str | None = Field(default=None, max_length=80)
     name: str = Field(min_length=1, max_length=200)
+    brand: str | None = Field(default=None, max_length=120)
     description: str | None = None
     category: str | None = Field(default=None, max_length=120)
     status: Literal["draft", "active", "archived"] = "active"
+    cost_price_minor: int | None = Field(default=None, ge=0)
     price_minor: int = Field(ge=0)
     currency: str = Field(default="INR", min_length=3, max_length=3)
     tax_rate_bps: int = Field(default=0, ge=0, le=10000)
+    tax_name: str | None = Field(default=None, max_length=60)
+    hsn_sac_code: str | None = Field(default=None, max_length=16)
+    tax_inclusive: bool = False
+    unit: str = Field(default="PCS", min_length=1, max_length=24)
+    variants: list[dict] | None = None
+    reorder_threshold: int = Field(default=5, ge=0)
+    image_url: str | None = None
     metadata: dict | None = None
 
     @field_validator("sku", "name")
@@ -48,13 +59,19 @@ class CommerceProductCreate(BaseModel):
 
 class CommerceProductUpdate(BaseModel):
     sku: str | None = Field(default=None, min_length=1, max_length=80)
+    barcode: str | None = Field(default=None, max_length=80)
     name: str | None = Field(default=None, min_length=1, max_length=200)
+    brand: str | None = Field(default=None, max_length=120)
     description: str | None = None
     category: str | None = Field(default=None, max_length=120)
     status: Literal["draft", "active", "archived"] | None = None
+    cost_price_minor: int | None = Field(default=None, ge=0)
     price_minor: int | None = Field(default=None, ge=0)
     currency: str | None = Field(default=None, min_length=3, max_length=3)
     tax_rate_bps: int | None = Field(default=None, ge=0, le=10000)
+    tax_name: str | None = Field(default=None, max_length=60)
+    reorder_threshold: int | None = Field(default=None, ge=0)
+    image_url: str | None = None
     metadata: dict | None = None
 
     @field_validator("sku", "name")
@@ -84,14 +101,25 @@ class CommerceProductOut(BaseModel):
     id: str
     organisation_id: int
     sku: str
+    barcode: str | None = None
     name: str
+    brand: str | None = None
     description: str | None = None
     category: str | None = None
     status: str
+    cost_price_minor: int | None = None
+    cost_price: str | None = None
     price_minor: int
     price: str
     currency: str
     tax_rate_bps: int
+    tax_name: str | None = None
+    hsn_sac_code: str | None = None
+    tax_inclusive: bool = False
+    unit: str = "PCS"
+    variants: list[dict] | dict | None = None
+    reorder_threshold: int = 5
+    image_url: str | None = None
     metadata: dict | None = None
     inventory: InventorySummaryOut
     origin: str = "real"
@@ -196,6 +224,8 @@ class CustomerCreate(BaseModel):
     name: str = Field(min_length=1, max_length=150)
     email: str | None = Field(default=None, min_length=5, max_length=320)
     phone: str | None = Field(default=None, max_length=30)
+    gstin: str | None = Field(default=None, max_length=20)
+    state_code: str | None = Field(default=None, max_length=4)
     billing_address: dict | None = None
     shipping_address: dict | None = None
 
@@ -223,6 +253,11 @@ class CustomerOut(BaseModel):
     name: str
     email: str | None = None
     phone: str | None = None
+    gstin: str | None = None
+    state_code: str | None = None
+    loyalty_points: int = 0
+    store_credit_minor: int = 0
+    tier: str = "standard"
     billing_address: dict | None = None
     shipping_address: dict | None = None
     status: str
@@ -249,6 +284,8 @@ class OrderCreate(BaseModel):
     customer_id: int | None = Field(default=None, gt=0)
     items: list[OrderItemCreate] = Field(min_length=1, max_length=100)
     discount_minor: int = Field(default=0, ge=0)
+    coupon_code: str | None = Field(default=None, max_length=60)
+    campaign_id: int | None = Field(default=None, gt=0)
     submit_for_payment: bool = True
     reservation_ttl_minutes: int = Field(default=15, ge=1, le=1440)
 

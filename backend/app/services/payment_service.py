@@ -443,6 +443,14 @@ def apply_verified_payment_capture(
             )
         )
     order.updated_at = now
+    from app.services import india_tax_service, sales_service
+
+    sales_service.sync_sales_record_for_order(
+        db,
+        order,
+        transaction_ref=provider_payment_id,
+    )
+    india_tax_service.generate_invoice_for_order(db, organisation_id, order.id)
     return True
 
 

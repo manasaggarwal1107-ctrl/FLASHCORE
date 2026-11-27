@@ -33,6 +33,9 @@ def _inventory_map(
             func.coalesce(func.sum(InventoryBalance.reserved_quantity), 0).label(
                 "reserved"
             ),
+            func.coalesce(func.sum(InventoryBalance.damaged_quantity), 0).label(
+                "damaged"
+            ),
             func.min(InventoryBalance.low_stock_threshold).label("threshold"),
         )
         .where(
@@ -46,9 +49,11 @@ def _inventory_map(
     for row in rows:
         on_hand = int(row.on_hand or 0)
         reserved = int(row.reserved or 0)
+        damaged = int(row.damaged or 0)
         result[row.product_id] = InventorySummaryOut(
             on_hand=on_hand,
             reserved=reserved,
+            damaged=damaged,
             sold=0,
             available=max(0, on_hand - reserved),
             low_stock_threshold=int(row.threshold) if row.threshold is not None else 5,
@@ -60,20 +65,40 @@ def to_product_out(
     product: CommerceProduct, summary: InventorySummaryOut | None = None
 ) -> CommerceProductOut:
     inv = summary or InventorySummaryOut(
-        on_hand=0, reserved=0, sold=0, available=0, low_stock_threshold=5
+        on_hand=0,
+        reserved=0,
+        damaged=0,
+        sold=0,
+        available=0,
+        low_stock_threshold=product.reorder_threshold,
     )
     return CommerceProductOut(
         id=str(product.id),
         organisation_id=product.organisation_id,
         sku=product.sku,
+        barcode=product.barcode,
         name=product.name,
+        brand=product.brand,
         description=product.description,
         category=product.category,
         status=product.status,
+        cost_price_minor=product.cost_price_minor,
+        cost_price=(
+            format_minor_to_decimal_str(product.cost_price_minor)
+            if product.cost_price_minor is not None
+            else None
+        ),
         price_minor=product.price_minor,
         price=format_minor_to_decimal_str(product.price_minor),
         currency=product.currency,
         tax_rate_bps=product.tax_rate_bps,
+        tax_name=product.tax_name,
+        hsn_sac_code=product.hsn_sac_code,
+        tax_inclusive=product.tax_inclusive,
+        unit=product.unit,
+        variants=product.variants_json,
+        reorder_threshold=product.reorder_threshold,
+        image_url=product.image_url,
         metadata=product.metadata_json,
         inventory=inv,
         origin="real",
@@ -90,13 +115,23 @@ def create_product(
     product = CommerceProduct(
         organisation_id=org_id,
         sku=payload.sku,
+        barcode=payload.barcode,
         name=payload.name,
+        brand=payload.brand,
         description=payload.description,
         category=payload.category,
         status=payload.status,
+        cost_price_minor=payload.cost_price_minor,
         price_minor=payload.price_minor,
         currency=payload.currency,
         tax_rate_bps=payload.tax_rate_bps,
+        tax_name=payload.tax_name,
+        hsn_sac_code=payload.hsn_sac_code,
+        tax_inclusive=payload.tax_inclusive,
+        unit=payload.unit,
+        variants_json=payload.variants,
+        reorder_threshold=payload.reorder_threshold,
+        image_url=payload.image_url,
         metadata_json=payload.metadata,
     )
     try:
@@ -156,7 +191,9 @@ def list_products(
         pattern = f"%{_escape_like(search.strip())}%"
         filt = (
             CommerceProduct.sku.ilike(pattern, escape="\\")
+            | CommerceProduct.barcode.ilike(pattern, escape="\\")
             | CommerceProduct.name.ilike(pattern, escape="\\")
+            | CommerceProduct.brand.ilike(pattern, escape="\\")
             | CommerceProduct.category.ilike(pattern, escape="\\")
         )
         query = query.where(filt)
@@ -212,13 +249,19 @@ def update_product(
     changes: dict = {}
     for field in (
         "sku",
+        "barcode",
         "name",
+        "brand",
         "description",
         "category",
         "status",
+        "cost_price_minor",
         "price_minor",
         "currency",
         "tax_rate_bps",
+        "tax_name",
+        "reorder_threshold",
+        "image_url",
     ):
         val = getattr(payload, field)
         if val is not None and getattr(product, field) != val:
