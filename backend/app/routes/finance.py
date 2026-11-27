@@ -11,6 +11,12 @@ from app.schemas.finance import (
     PaymentLinkCreateRequest,
     PaymentLinkListResponse,
     PaymentLinkOut,
+    ReconciliationItemListResponse,
+    ReconciliationItemOut,
+    ReconciliationResolveRequest,
+    ReconciliationRunCreateRequest,
+    ReconciliationRunListResponse,
+    ReconciliationRunOut,
     RefundCreateRequest,
     RefundDecisionRequest,
     RefundListResponse,
@@ -23,7 +29,12 @@ from app.schemas.finance import (
     SettlementOut,
     SettlementSyncResponse,
 )
-from app.services import payment_link_service, refund_service, settlement_service
+from app.services import (
+    payment_link_service,
+    reconciliation_service,
+    refund_service,
+    settlement_service,
+)
 
 router = APIRouter(prefix="/api/v1/payments", tags=["Financial Operations"])
 
@@ -266,4 +277,97 @@ def export_finance_report(
         headers={
             "Content-Disposition": 'attachment; filename="flashcore-financial-report.csv"'
         },
+    )
+
+
+@router.post(
+    "/reconciliation/runs", response_model=ReconciliationRunOut, status_code=201
+)
+def create_reconciliation_run(
+    payload: ReconciliationRunCreateRequest,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    org_ctx: OrgContext = Depends(require_org_roles("owner", "admin", "operator")),
+    db: Session = Depends(get_db),
+):
+    return reconciliation_service.run_reconciliation(
+        db,
+        org_ctx,
+        provider=payload.provider,
+        currency=payload.currency,
+        period_start=payload.period_start,
+        period_end=payload.period_end,
+        include_provider_fetch=payload.include_provider_fetch,
+        idempotency_key=idempotency_key,
+    )
+
+
+@router.get("/reconciliation/runs", response_model=ReconciliationRunListResponse)
+def list_reconciliation_runs(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(25, ge=1, le=100, alias="pageSize"),
+    org_ctx: OrgContext = Depends(
+        require_org_roles("owner", "admin", "analyst", "operator")
+    ),
+    db: Session = Depends(get_db),
+):
+    return reconciliation_service.list_reconciliation_runs(
+        db, org_ctx.organisation.id, page=page, page_size=page_size
+    )
+
+
+@router.get("/reconciliation/runs/{run_id}", response_model=ReconciliationRunOut)
+def get_reconciliation_run(
+    run_id: int,
+    org_ctx: OrgContext = Depends(
+        require_org_roles("owner", "admin", "analyst", "operator")
+    ),
+    db: Session = Depends(get_db),
+):
+    return reconciliation_service.get_reconciliation_run(
+        db, org_ctx.organisation.id, run_id
+    )
+
+
+@router.get(
+    "/reconciliation/runs/{run_id}/items",
+    response_model=ReconciliationItemListResponse,
+)
+def list_reconciliation_items(
+    run_id: int,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=100, alias="pageSize"),
+    outcome: str | None = Query(None),
+    resolution_status: str | None = Query(None, alias="resolutionStatus"),
+    org_ctx: OrgContext = Depends(
+        require_org_roles("owner", "admin", "analyst", "operator")
+    ),
+    db: Session = Depends(get_db),
+):
+    return reconciliation_service.list_reconciliation_items(
+        db,
+        org_ctx.organisation.id,
+        run_id,
+        page=page,
+        page_size=page_size,
+        outcome=outcome,
+        resolution_status=resolution_status,
+    )
+
+
+@router.post(
+    "/reconciliation/items/{item_id}/resolve",
+    response_model=ReconciliationItemOut,
+)
+def resolve_reconciliation_item(
+    item_id: int,
+    payload: ReconciliationResolveRequest,
+    org_ctx: OrgContext = Depends(require_org_roles("owner", "admin")),
+    db: Session = Depends(get_db),
+):
+    return reconciliation_service.resolve_reconciliation_item(
+        db,
+        org_ctx,
+        item_id,
+        resolution_status=payload.resolution_status,
+        resolution_note=payload.resolution_note,
     )
