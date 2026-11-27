@@ -1,19 +1,36 @@
 from app.services.payments.adapter import (
     CheckoutSignatureInput,
+    GatewayCapabilityUnavailableError,
     GatewayCredentials,
     GatewayOrderRequest,
     GatewayOrderResult,
     GatewayPaymentDetails,
+    GatewayPaymentLinkRequest,
+    GatewayPaymentLinkResult,
+    GatewayRefundRequest,
+    GatewayRefundResult,
+    GatewaySettlementResult,
+    GatewayTimeoutError,
     PaymentGatewayAdapter,
+    PaymentGatewayError,
 )
-from app.services.payments.razorpay_adapter import RazorpayAdapter
+from app.services.payments.razorpay_adapter import RazorpayAdapter, RazorpayGatewayError
 
 __all__ = [
     "CheckoutSignatureInput",
+    "GatewayCapabilityUnavailableError",
     "GatewayCredentials",
     "GatewayOrderRequest",
     "GatewayOrderResult",
     "GatewayPaymentDetails",
+    "GatewayPaymentLinkRequest",
+    "GatewayPaymentLinkResult",
+    "GatewayRefundRequest",
+    "GatewayRefundResult",
+    "GatewaySettlementResult",
+    "GatewayTimeoutError",
     "PaymentGatewayAdapter",
+    "PaymentGatewayError",
     "RazorpayAdapter",
+    "RazorpayGatewayError",
 ]
