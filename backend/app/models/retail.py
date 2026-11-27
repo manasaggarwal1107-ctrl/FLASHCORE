@@ -43,6 +43,19 @@ class CommerceProduct(Base):
             "tax_rate_bps >= 0 AND tax_rate_bps <= 10000",
             name="chk_commerce_products_tax_rate",
         ),
+        CheckConstraint(
+            "cost_price_minor IS NULL OR cost_price_minor >= 0",
+            name="chk_commerce_products_cost_price",
+        ),
+        CheckConstraint(
+            "reorder_threshold >= 0",
+            name="chk_commerce_products_reorder_threshold",
+        ),
+        Index(
+            "idx_commerce_products_org_barcode",
+            "organisation_id",
+            "barcode",
+        ),
         Index("idx_commerce_products_org_id", "organisation_id"),
         Index("idx_commerce_products_org_status", "organisation_id", "status"),
     )
@@ -54,12 +67,15 @@ class CommerceProduct(Base):
         BigInteger, ForeignKey("organisations.id"), nullable=False
     )
     sku: Mapped[str] = mapped_column(String(80), nullable=False)
+    barcode: Mapped[str | None] = mapped_column(String(80))
     name: Mapped[str] = mapped_column(String(200), nullable=False)
+    brand: Mapped[str | None] = mapped_column(String(120))
     description: Mapped[str | None] = mapped_column(Text)
     category: Mapped[str | None] = mapped_column(String(120))
     status: Mapped[str] = mapped_column(
         String(20), nullable=False, server_default=text("'draft'")
     )
+    cost_price_minor: Mapped[int | None] = mapped_column(BigInteger)
     price_minor: Mapped[int] = mapped_column(BigInteger, nullable=False)
     currency: Mapped[str] = mapped_column(
         String(3), nullable=False, server_default=text("'INR'")
@@ -67,6 +83,19 @@ class CommerceProduct(Base):
     tax_rate_bps: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default=text("0")
     )
+    tax_name: Mapped[str | None] = mapped_column(String(60))
+    hsn_sac_code: Mapped[str | None] = mapped_column(String(16))
+    tax_inclusive: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("FALSE")
+    )
+    unit: Mapped[str] = mapped_column(
+        String(24), nullable=False, server_default=text("'PCS'")
+    )
+    variants_json: Mapped[list | dict | None] = mapped_column("variants", JSONB)
+    reorder_threshold: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("5")
+    )
+    image_url: Mapped[str | None] = mapped_column(Text)
     metadata_json: Mapped[dict | None] = mapped_column("metadata", JSONB)
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=text("NOW()")
@@ -106,6 +135,13 @@ class InventoryLocation(Base):
     location_type: Mapped[str] = mapped_column(
         String(30), nullable=False, server_default=text("'warehouse'")
     )
+    address: Mapped[str | None] = mapped_column(Text)
+    city: Mapped[str | None] = mapped_column(String(100))
+    state: Mapped[str | None] = mapped_column(String(100))
+    postal_code: Mapped[str | None] = mapped_column(String(30))
+    is_default: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("FALSE")
+    )
     is_active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("TRUE")
     )
@@ -140,6 +176,10 @@ class InventoryBalance(Base):
             name="chk_inventory_balances_invariant",
         ),
         CheckConstraint(
+            "damaged_quantity >= 0",
+            name="chk_inventory_balances_damaged",
+        ),
+        CheckConstraint(
             "low_stock_threshold >= 0",
             name="chk_inventory_balances_threshold",
         ),
@@ -166,9 +206,13 @@ class InventoryBalance(Base):
     reserved_quantity: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default=text("0")
     )
+    damaged_quantity: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
+    )
     low_stock_threshold: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default=text("5")
     )
+    last_movement_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
     updated_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True),
         nullable=False,
@@ -182,7 +226,7 @@ class InventoryMovement(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "movement_type IN ('adjustment', 'reservation', 'release', 'expiry', 'fulfilment', 'sale')",
+            "movement_type IN ('adjustment', 'reservation', 'release', 'expiry', 'fulfilment', 'sale', 'transfer_out', 'transfer_in', 'receipt', 'damaged', 'return_restock')",
             name="chk_inventory_movements_type",
         ),
         CheckConstraint(
@@ -252,6 +296,21 @@ class Customer(Base):
     name: Mapped[str] = mapped_column(String(150), nullable=False)
     email: Mapped[str | None] = mapped_column(String(320))
     phone: Mapped[str | None] = mapped_column(String(30))
+    gstin: Mapped[str | None] = mapped_column(String(20))
+    state_code: Mapped[str | None] = mapped_column(String(4))
+    loyalty_points: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
+    )
+    store_credit_minor: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, server_default=text("0")
+    )
+    tier: Mapped[str] = mapped_column(
+        String(30), nullable=False, server_default=text("'standard'")
+    )
+    marketing_consent: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("FALSE")
+    )
+    opted_out_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
     billing_address: Mapped[dict | None] = mapped_column(JSONB)
     shipping_address: Mapped[dict | None] = mapped_column(JSONB)
     status: Mapped[str] = mapped_column(
@@ -331,6 +390,26 @@ class Order(Base):
         String(30), nullable=False, server_default=text("'UNPAID'")
     )
     customer_snapshot: Mapped[dict | None] = mapped_column(JSONB)
+    coupon_code: Mapped[str | None] = mapped_column(String(60))
+    promotion_id: Mapped[int | None] = mapped_column(BigInteger)
+    campaign_id: Mapped[int | None] = mapped_column(BigInteger)
+    source_channel: Mapped[str] = mapped_column(
+        String(30), nullable=False, server_default=text("'web'")
+    )
+    payment_method: Mapped[str | None] = mapped_column(String(30))
+    cashier_email: Mapped[str | None] = mapped_column(String(150))
+    pos_shift_id: Mapped[int | None] = mapped_column(BigInteger)
+    place_of_supply_state: Mapped[str | None] = mapped_column(String(4))
+    cgst_minor: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, server_default=text("0")
+    )
+    sgst_minor: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, server_default=text("0")
+    )
+    igst_minor: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, server_default=text("0")
+    )
+    offline_tx_id: Mapped[str | None] = mapped_column(String(100))
     reservation_expires_at: Mapped[datetime | None] = mapped_column(
         TIMESTAMP(timezone=True)
     )
