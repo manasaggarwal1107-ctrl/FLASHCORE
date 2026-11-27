@@ -1,5 +1,6 @@
-﻿import { useState } from 'react';
+﻿import { useContext, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { QueryClientContext, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Bell,
   Building2,
@@ -7,6 +8,7 @@ import {
   KeyRound,
   LogOut,
   Menu,
+  Mic,
   Monitor,
   Moon,
   Search,
@@ -17,6 +19,7 @@ import {
 import { Popover } from '@/components/ui/Popover';
 import { useAuthToken } from '@/hooks/useAuthToken';
 import { useOptionalAuth } from '@/hooks/useAuth';
+import { expansionApi } from '@/services/api/expansionApi';
 import { Breadcrumbs } from './Breadcrumbs';
 import { ConnectivityIndicator, EnvironmentBadge } from './StatusIndicators';
 import { useTheme } from './ThemeProvider';
@@ -35,6 +38,66 @@ const THEME_OPTIONS: Array<{
   { value: 'system', label: 'System default', icon: Monitor },
 ];
 
+function NotificationsBellControl({ orgId, enabled }: { orgId?: number; enabled: boolean }) {
+  const qc = useQueryClient();
+  const notificationsQ = useQuery({
+    queryKey: ['header.notifications', orgId],
+    queryFn: expansionApi.listNotifications,
+    enabled,
+  });
+  const markReadMut = useMutation({
+    mutationFn: (id: string) => expansionApi.markNotificationRead(id),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['header.notifications'] }),
+  });
+
+  return (
+    <Popover
+      trigger={({ toggle, ...aria }) => (
+        <button
+          type="button"
+          onClick={toggle}
+          className={`${iconButton} relative`}
+          aria-label="Notifications"
+          {...aria}
+        >
+          <Bell className="h-4 w-4" aria-hidden />
+          {(notificationsQ.data?.unreadCount ?? 0) > 0 && (
+            <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-warning" aria-hidden />
+          )}
+        </button>
+      )}
+    >
+      {() => (
+        <div className="w-80 p-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold">Alerts & Notifications</h2>
+            <span className="text-2xs text-ink-faint">{notificationsQ.data?.unreadCount ?? 0} unread</span>
+          </div>
+          <div className="mt-2 max-h-64 space-y-2 overflow-y-auto">
+            {(notificationsQ.data?.items ?? []).length === 0 ? (
+              <p className="text-xs text-ink-muted">No active operational alerts.</p>
+            ) : (
+              notificationsQ.data?.items.slice(0, 8).map((n) => (
+                <div key={n.id} className="rounded border border-line bg-surface-raised p-2 text-xs">
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="font-medium text-ink">{n.title}</span>
+                    {!n.isRead && (
+                      <button type="button" onClick={() => markReadMut.mutate(n.id)} className="text-2xs text-accent underline">
+                        Mark read
+                      </button>
+                    )}
+                  </div>
+                  <p className="mt-0.5 text-ink-muted">{n.message}</p>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </Popover>
+  );
+}
+
 export function Header({
   onOpenMobileNav,
   onOpenSearch,
@@ -44,6 +107,7 @@ export function Header({
 }) {
   const token = useAuthToken();
   const auth = useOptionalAuth();
+  const hasQueryClient = Boolean(useContext(QueryClientContext));
   const navigate = useNavigate();
   const { theme, preference, systemTheme, setTheme } = useTheme();
   const [switchingOrg, setSwitchingOrg] = useState(false);
@@ -179,29 +243,17 @@ export function Header({
         <ConnectivityIndicator />
         <EnvironmentBadge />
 
-        <Popover
-          trigger={({ toggle, ...aria }) => (
-            <button
-              type="button"
-              onClick={toggle}
-              className={iconButton}
-              aria-label="Notifications"
-              {...aria}
-            >
-              <Bell className="h-4 w-4" aria-hidden />
-            </button>
-          )}
-        >
-          {() => (
-            <div className="w-72 p-4">
-              <h2 className="text-sm font-semibold">Notifications</h2>
-              <p className="mt-2 text-xs text-ink-muted">
-                No notification source is connected. Alerts will appear here
-                once the API contract defines a notifications endpoint.
-              </p>
-            </div>
-          )}
-        </Popover>
+        <Link to="/voice" className={iconButton} aria-label="Voice Intelligence" title="FLASHCORE Voice Intelligence">
+          <Mic className="h-4 w-4" aria-hidden />
+        </Link>
+
+        {hasQueryClient ? (
+          <NotificationsBellControl orgId={activeOrg?.organisationId} enabled={Boolean(user && activeOrg)} />
+        ) : (
+          <button type="button" className={iconButton} aria-label="Notifications">
+            <Bell className="h-4 w-4" aria-hidden />
+          </button>
+        )}
 
         <Popover
           trigger={({ toggle, ...aria }) => (
@@ -260,10 +312,8 @@ export function Header({
                       try {
                         await auth.logout();
                       } catch {
-                        // Local credentials are cleared by AuthProvider even
-                        // if the server cannot confirm session revocation.
+                        // Local credentials cleared by AuthProvider even if unreachable.
                       }
-
                       close();
                       navigate('/login', { replace: true });
                     })();

@@ -1,20 +1,23 @@
-import { useState } from 'react';
+import { useContext, useEffect, useState } from 'react';
 import { Monitor, Moon, Sun } from 'lucide-react';
+import { QueryClientContext, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useOptionalTheme } from '@/components/layout/ThemeProvider';
 import type { ThemePreference } from '@/components/layout/ThemeProvider';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
-import { FormField, Input } from '@/components/ui/Field';
+import { FormField, Input, Select } from '@/components/ui/Field';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Panel, PanelBody, PanelHeader } from '@/components/ui/Panel';
 import { GatewaySettingsPanel } from '@/features/payments/GatewaySettingsPanel';
 import { DetailList } from '@/features/shared/DetailList';
+import { useOptionalAuth } from '@/hooks/useAuth';
 import { useAuthToken } from '@/hooks/useAuthToken';
 import { cn } from '@/lib/cn';
 import { config } from '@/lib/config';
 import { setAuthToken } from '@/services/api/auth';
+import { expansionApi } from '@/services/api/expansionApi';
 import { tokenSchema } from './tokenSchema';
 import type { TokenFormValues } from './tokenSchema';
 
@@ -178,6 +181,95 @@ export function SettingsPage() {
       <div className="mt-4">
         <GatewaySettingsPanel />
       </div>
+
+      <IndiaTaxProfileSection />
+    </div>
+  );
+}
+
+function IndiaTaxProfileSection() {
+  const hasQueryClient = Boolean(useContext(QueryClientContext));
+  const auth = useOptionalAuth();
+  if (!hasQueryClient) return null;
+  return <IndiaTaxProfileForm enabled={Boolean(auth?.user)} />;
+}
+
+function IndiaTaxProfileForm({ enabled }: { enabled: boolean }) {
+  const qc = useQueryClient();
+  const [legalName, setLegalName] = useState('');
+  const [gstin, setGstin] = useState('');
+  const [stateCode, setStateCode] = useState('27');
+  const [regType, setRegType] = useState<'regular' | 'composition' | 'unregistered'>('regular');
+  const [invPrefix, setInvPrefix] = useState('INV');
+  const [fyCode, setFyCode] = useState('2627');
+  const [allowNeg, setAllowNeg] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  const profQ = useQuery({
+    queryKey: ['tax.profile'],
+    queryFn: expansionApi.getTaxProfile,
+    enabled,
+  });
+
+  useEffect(() => {
+    if (!profQ.data) return;
+    setLegalName(profQ.data.legalName);
+    setGstin(profQ.data.gstin ?? '');
+    setStateCode(profQ.data.stateCode);
+    setRegType(profQ.data.registrationType);
+    setInvPrefix(profQ.data.invoicePrefix);
+    setFyCode(profQ.data.financialYearCode);
+    setAllowNeg(profQ.data.allowNegativeStock);
+  }, [profQ.data]);
+
+  const saveMut = useMutation({
+    mutationFn: () =>
+      expansionApi.updateTaxProfile({
+        legal_name: legalName || 'FLASHCORE Retail',
+        gstin: gstin || null,
+        registration_type: regType,
+        state_name: stateCode === '07' ? 'Delhi' : 'Maharashtra',
+        state_code: stateCode,
+        invoice_prefix: invPrefix,
+        financial_year_code: fyCode,
+        allow_negative_stock: allowNeg,
+      }),
+    onSuccess: () => {
+      setMsg('India GST & compliance profile saved.');
+      void qc.invalidateQueries({ queryKey: ['tax.profile'] });
+    },
+    onError: (e: Error) => setMsg(e.message),
+  });
+
+  if (!enabled) return null;
+
+  return (
+    <div className="mt-4">
+      <Panel>
+        <PanelHeader title="India GST & DPDP Compliance Profile" description="Configurable GSTIN, place-of-supply state code, FY invoice numbering, and negative-stock policy." />
+        <PanelBody className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <FormField label="Legal Business Name">{(p) => <Input {...p} value={legalName} onChange={(e) => setLegalName(e.target.value)} />}</FormField>
+          <FormField label="GSTIN (15-char)">{(p) => <Input {...p} value={gstin} onChange={(e) => setGstin(e.target.value.toUpperCase())} placeholder="27AABCU9603R1ZM" />}</FormField>
+          <FormField label="Registration Type">{(p) => (
+            <Select {...p} value={regType} onChange={(e) => setRegType(e.target.value as typeof regType)}>
+              <option value="regular">Regular (Tax Invoice)</option>
+              <option value="composition">Composition (Bill of Supply)</option>
+              <option value="unregistered">Unregistered</option>
+            </Select>
+          )}</FormField>
+          <FormField label="Origin State Code">{(p) => <Input {...p} value={stateCode} onChange={(e) => setStateCode(e.target.value)} placeholder="27" />}</FormField>
+          <FormField label="Invoice Prefix">{(p) => <Input {...p} value={invPrefix} onChange={(e) => setInvPrefix(e.target.value.toUpperCase())} />}</FormField>
+          <FormField label="Financial Year">{(p) => <Input {...p} value={fyCode} onChange={(e) => setFyCode(e.target.value)} />}</FormField>
+          <label className="flex items-center gap-2 text-xs text-ink-muted sm:col-span-2">
+            <input type="checkbox" checked={allowNeg} onChange={(e) => setAllowNeg(e.target.checked)} />
+            Allow admin-authorized negative stock override during POS checkout
+          </label>
+          <div className="flex items-center gap-3 sm:col-span-3">
+            <Button variant="primary" loading={saveMut.isPending} onClick={() => saveMut.mutate()}>Save Tax Profile</Button>
+            {msg && <span className="text-xs text-ink-muted">{msg}</span>}
+          </div>
+        </PanelBody>
+      </Panel>
     </div>
   );
 }

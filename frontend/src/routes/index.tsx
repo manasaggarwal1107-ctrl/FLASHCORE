@@ -69,6 +69,71 @@ export const router = createBrowserRouter([
           </RequireRole>
         ),
       },
+      {
+        path: 'pos',
+        element: (
+          <RequireRole allowedRoles={['owner', 'admin', 'operator']}>
+            {page(() => import('@/features/pos/PosPage'), 'PosPage')}
+          </RequireRole>
+        ),
+      },
+      {
+        path: 'voice',
+        element: page(
+          () => import('@/features/voice/VoiceIntelligencePage'),
+          'VoiceIntelligencePage',
+        ),
+      },
+      {
+        path: 'warehouses',
+        element: page(
+          () => import('@/features/operations/WarehousesPage'),
+          'WarehousesPage',
+        ),
+      },
+      {
+        path: 'procurement',
+        element: page(
+          () => import('@/features/operations/ProcurementPage'),
+          'ProcurementPage',
+        ),
+      },
+      {
+        path: 'sales',
+        element: (
+          <RequireRole allowedRoles={['owner', 'admin', 'analyst']}>
+            {page(
+              () => import('@/features/operations/SalesInvoicesPage'),
+              'SalesInvoicesPage',
+            )}
+          </RequireRole>
+        ),
+      },
+      {
+        path: 'surge-control',
+        element: page(
+          () => import('@/features/operations/CampaignsPromotionsPage'),
+          'CampaignsPromotionsPage',
+        ),
+      },
+      {
+        path: 'returns',
+        element: page(
+          () => import('@/features/operations/ReturnsPage'),
+          'ReturnsPage',
+        ),
+      },
+      {
+        path: 'reports',
+        element: (
+          <RequireRole allowedRoles={['owner', 'admin', 'analyst']}>
+            {page(
+              () => import('@/features/operations/ReportsHubPage'),
+              'ReportsHubPage',
+            )}
+          </RequireRole>
+        ),
+      },
 
       {
         path: 'catalog',
