@@ -365,3 +365,133 @@ def test_webhook_failed_then_retried_captured_recovery(
     ).one()
     assert ord_final.order_status == "PAID"
     assert ord_final.payment_status == "CAPTURED"
+
+
+def test_webhook_rejects_incomplete_or_mismatched_financial_payloads(
+    client, db_session, monkeypatch
+):
+    ctx = _setup_checkout_order(client, monkeypatch, "finval")
+    base_cases = [
+        (
+            "missing_amount_captured",
+            "payment.captured",
+            {"id": "pay_fin_1", "order_id": ctx["po"]["provider_order_id"], "currency": "INR"},
+        ),
+        (
+            "missing_currency_captured",
+            "payment.captured",
+            {"id": "pay_fin_2", "order_id": ctx["po"]["provider_order_id"], "amount": 60000},
+        ),
+        (
+            "malformed_amount_string",
+            "payment.captured",
+            {"id": "pay_fin_3", "order_id": ctx["po"]["provider_order_id"], "amount": "60000", "currency": "INR"},
+        ),
+        (
+            "malformed_amount_float",
+            "payment.captured",
+            {"id": "pay_fin_4", "order_id": ctx["po"]["provider_order_id"], "amount": 600.5, "currency": "INR"},
+        ),
+        (
+            "malformed_amount_bool",
+            "payment.captured",
+            {"id": "pay_fin_5", "order_id": ctx["po"]["provider_order_id"], "amount": True, "currency": "INR"},
+        ),
+        (
+            "zero_amount_captured",
+            "payment.captured",
+            {"id": "pay_fin_6", "order_id": ctx["po"]["provider_order_id"], "amount": 0, "currency": "INR"},
+        ),
+        (
+            "mismatched_amount_captured",
+            "payment.captured",
+            {"id": "pay_fin_7", "order_id": ctx["po"]["provider_order_id"], "amount": 59900, "currency": "INR"},
+        ),
+        (
+            "mismatched_currency_captured",
+            "payment.captured",
+            {"id": "pay_fin_8", "order_id": ctx["po"]["provider_order_id"], "amount": 60000, "currency": "USD"},
+        ),
+        (
+            "missing_payment_id_captured",
+            "payment.captured",
+            {"order_id": ctx["po"]["provider_order_id"], "amount": 60000, "currency": "INR"},
+        ),
+        (
+            "missing_amount_authorized",
+            "payment.authorized",
+            {"id": "pay_fin_10", "order_id": ctx["po"]["provider_order_id"], "currency": "INR"},
+        ),
+        (
+            "mismatched_amount_authorized",
+            "payment.authorized",
+            {"id": "pay_fin_11", "order_id": ctx["po"]["provider_order_id"], "amount": 100, "currency": "INR"},
+        ),
+        (
+            "missing_currency_failed",
+            "payment.failed",
+            {"id": "pay_fin_12", "order_id": ctx["po"]["provider_order_id"], "amount": 60000},
+        ),
+        (
+            "zero_amount_failed",
+            "payment.failed",
+            {"id": "pay_fin_13", "order_id": ctx["po"]["provider_order_id"], "amount": 0, "currency": "INR"},
+        ),
+    ]
+
+    for case_name, evt_type, entity in base_cases:
+        evt_id = f"evt_{case_name}"
+        raw = json.dumps(
+            {
+                "event": evt_type,
+                "payload": {"payment": {"entity": entity}},
+            }
+        ).encode("utf-8")
+        sig = _webhook_sig(raw, ctx["webhook_secret"])
+
+        resp = client.post(
+            "/api/v1/webhooks/razorpay",
+            content=raw,
+            headers={"X-Razorpay-Signature": sig, "X-Razorpay-Event-Id": evt_id},
+        )
+        assert resp.status_code == 422, f"{case_name}: expected 422 got {resp.status_code} {resp.text}"
+
+        # Duplicate replay of the rejected malformed event remains idempotent without IntegrityError
+        replay = client.post(
+            "/api/v1/webhooks/razorpay",
+            content=raw,
+            headers={"X-Razorpay-Signature": sig, "X-Razorpay-Event-Id": evt_id},
+        )
+        assert replay.status_code == 422
+
+        ev = db_session.execute(
+            text(
+                "SELECT signature_valid, processing_status FROM payment_webhook_events "
+                "WHERE provider_event_id = :eid"
+            ),
+            {"eid": evt_id},
+        ).one()
+        assert ev.signature_valid is True
+        assert ev.processing_status == "failed"
+
+    # Zero financial transactions or attempts created, order remains PENDING_PAYMENT & CREATED
+    assert (
+        db_session.execute(
+            text("SELECT COUNT(*) FROM payment_transactions WHERE order_id = :oid"),
+            {"oid": ctx["order_id"]},
+        ).scalar_one()
+        == 0
+    )
+    assert (
+        db_session.execute(
+            text("SELECT COUNT(*) FROM payment_attempts WHERE order_id = :oid"),
+            {"oid": ctx["order_id"]},
+        ).scalar_one()
+        == 0
+    )
+    ord_state = db_session.execute(
+        text("SELECT order_status, payment_status FROM orders WHERE id = :oid"),
+        {"oid": ctx["order_id"]},
+    ).one()
+    assert ord_state.order_status == "PENDING_PAYMENT"
+    assert ord_state.payment_status == "CREATED"

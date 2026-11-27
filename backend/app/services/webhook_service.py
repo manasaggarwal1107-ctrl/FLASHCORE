@@ -79,6 +79,41 @@ def _build_sanitized_summary(
     return summary
 
 
+def _validate_webhook_payment_financials(
+    payment_entity: object,
+    po: PaymentOrder,
+) -> tuple[str, int, str]:
+    if not isinstance(payment_entity, dict):
+        raise ValueError("Webhook payload missing payment entity.")
+
+    raw_pid = payment_entity.get("id")
+    if not isinstance(raw_pid, str) or not raw_pid.strip():
+        raise ValueError("Webhook payment entity missing valid provider payment ID.")
+    provider_payment_id = raw_pid.strip()
+
+    if "amount" not in payment_entity or payment_entity["amount"] is None:
+        raise ValueError("Webhook payment entity missing amount.")
+    raw_amount = payment_entity["amount"]
+    if isinstance(raw_amount, bool) or not isinstance(raw_amount, int):
+        raise ValueError("Webhook payment amount must be an integer in minor units.")
+    if raw_amount <= 0:
+        raise ValueError("Webhook payment amount must be a positive integer.")
+
+    raw_currency = payment_entity.get("currency")
+    if not isinstance(raw_currency, str) or not raw_currency.strip():
+        raise ValueError("Webhook payment entity missing currency.")
+    currency = raw_currency.strip().upper()
+    if len(currency) != 3 or not currency.isascii() or not currency.isalpha():
+        raise ValueError("Webhook payment currency format is invalid.")
+
+    if raw_amount != po.amount_minor or currency != po.currency.upper():
+        raise ValueError(
+            "Webhook payment amount or currency does not match expected payment order."
+        )
+
+    return provider_payment_id, raw_amount, currency
+
+
 def _upsert_non_capture_attempt_and_txn(
     db: Session,
     *,
@@ -253,16 +288,23 @@ def process_razorpay_webhook(
         )
         .with_for_update()
     )
-    if existing_event is not None and existing_event.processing_status in (
-        "processed",
-        "ignored_duplicate",
-        "ignored_out_of_order",
-    ):
-        return {
-            "status": "ignored_duplicate",
-            "event_type": event_type,
-            "provider_event_id": provider_event_id,
-        }
+    if existing_event is not None:
+        if existing_event.processing_status in (
+            "processed",
+            "ignored_duplicate",
+            "ignored_out_of_order",
+        ):
+            return {
+                "status": "ignored_duplicate",
+                "event_type": event_type,
+                "provider_event_id": provider_event_id,
+            }
+        if existing_event.processing_status == "failed":
+            raise HTTPException(
+                status_code=422,
+                detail=existing_event.error_message
+                or "Malformed webhook financial payload.",
+            )
 
     order = db.scalar(
         select(Order).where(Order.id == po.order_id).with_for_update()
@@ -302,17 +344,45 @@ def process_razorpay_webhook(
         event_row.sanitized_summary = sanitized
 
     processing_status = "processed"
+    financial_events = (
+        "payment.captured",
+        "order.paid",
+        "payment.authorized",
+        "payment.failed",
+    )
 
-    if event_type in ("payment.captured", "order.paid"):
-        if not isinstance(payment_entity, dict) or not provider_payment_id:
-            if po.status == "CAPTURED" and order.order_status == "PAID":
-                processing_status = "ignored_duplicate"
-            else:
-                processing_status = "ignored_out_of_order"
-        else:
-            amount_minor = int(payment_entity.get("amount") or po.amount_minor)
-            currency = str(payment_entity.get("currency") or po.currency).upper()
-            method = payment_entity.get("method")
+    if event_type in financial_events:
+        try:
+            validated_pid, amount_minor, currency = _validate_webhook_payment_financials(
+                payment_entity, po
+            )
+        except ValueError as exc:
+            err_msg = str(exc)
+            event_row.processing_status = "failed"
+            event_row.error_message = err_msg
+            event_row.processed_at = now
+            db.add(
+                AuditLog(
+                    organisation_id=po.organisation_id,
+                    actor_type="webhook",
+                    actor_ref="razorpay",
+                    action=f"webhook_{event_type}_validation_failed",
+                    entity_name="payment_webhook_events",
+                    entity_id=str(event_row.id),
+                    details={
+                        "provider_event_id": provider_event_id,
+                        "provider_order_id": provider_order_id,
+                        "provider_payment_id": provider_payment_id,
+                        "error": err_msg,
+                    },
+                )
+            )
+            db.commit()
+            raise HTTPException(status_code=422, detail=err_msg) from exc
+
+        method = payment_entity.get("method") if isinstance(payment_entity, dict) else None
+
+        if event_type in ("payment.captured", "order.paid"):
             if po.status == "CAPTURED" and order.order_status == "PAID":
                 processing_status = "ignored_duplicate"
             else:
@@ -321,7 +391,7 @@ def process_razorpay_webhook(
                     organisation_id=po.organisation_id,
                     order=order,
                     po=po,
-                    provider_payment_id=provider_payment_id,
+                    provider_payment_id=validated_pid,
                     amount_minor=amount_minor,
                     currency=currency,
                     method=method,
@@ -335,78 +405,72 @@ def process_razorpay_webhook(
                 processing_status = (
                     "processed" if newly_captured else "ignored_duplicate"
                 )
-    elif event_type == "payment.authorized":
-        if po.status == "CAPTURED" or order.order_status == "PAID":
-            processing_status = "ignored_out_of_order"
-        elif isinstance(payment_entity, dict) and provider_payment_id:
-            amount_minor = int(payment_entity.get("amount") or po.amount_minor)
-            currency = str(payment_entity.get("currency") or po.currency).upper()
-            method = payment_entity.get("method")
-            if po.status != "CAPTURED":
-                po.status = "AUTHORIZED"
-                po.updated_at = now
-                order.payment_status = "AUTHORIZED"
-                order.updated_at = now
-            _upsert_non_capture_attempt_and_txn(
-                db,
-                organisation_id=po.organisation_id,
-                order=order,
-                po=po,
-                provider_payment_id=provider_payment_id,
-                target_status="AUTHORIZED",
-                amount_minor=amount_minor,
-                currency=currency,
-                method=method,
-                metadata={
-                    "provider_event_id": provider_event_id,
-                    "event_type": event_type,
-                },
-            )
-    elif event_type == "payment.failed":
-        if po.status == "CAPTURED" or order.order_status == "PAID":
-            processing_status = "ignored_out_of_order"
-        elif isinstance(payment_entity, dict) and provider_payment_id:
-            amount_minor = int(payment_entity.get("amount") or po.amount_minor)
-            currency = str(payment_entity.get("currency") or po.currency).upper()
-            method = payment_entity.get("method")
-            err_code = payment_entity.get("error_code")
-            err_desc = payment_entity.get("error_description")
-            po.status = "FAILED"
-            po.updated_at = now
-            order.payment_status = "FAILED"
-            order.updated_at = now
-            _upsert_non_capture_attempt_and_txn(
-                db,
-                organisation_id=po.organisation_id,
-                order=order,
-                po=po,
-                provider_payment_id=provider_payment_id,
-                target_status="FAILED",
-                amount_minor=amount_minor,
-                currency=currency,
-                method=method,
-                failure_code=err_code,
-                failure_reason=err_desc,
-                metadata={
-                    "provider_event_id": provider_event_id,
-                    "event_type": event_type,
-                },
-            )
-            db.add(
-                OrderEvent(
+        elif event_type == "payment.authorized":
+            if po.status == "CAPTURED" or order.order_status == "PAID":
+                processing_status = "ignored_out_of_order"
+            else:
+                if po.status != "CAPTURED":
+                    po.status = "AUTHORIZED"
+                    po.updated_at = now
+                    order.payment_status = "AUTHORIZED"
+                    order.updated_at = now
+                _upsert_non_capture_attempt_and_txn(
+                    db,
                     organisation_id=po.organisation_id,
-                    order_id=order.id,
-                    from_status=order.order_status,
-                    to_status=order.order_status,
-                    event_type="payment_failed",
-                    actor_ref="webhook:razorpay",
-                    details={
+                    order=order,
+                    po=po,
+                    provider_payment_id=validated_pid,
+                    target_status="AUTHORIZED",
+                    amount_minor=amount_minor,
+                    currency=currency,
+                    method=method,
+                    metadata={
                         "provider_event_id": provider_event_id,
-                        "provider_payment_id": provider_payment_id,
-                        "error_code": err_code,
+                        "event_type": event_type,
                     },
                 )
-            )
+        elif event_type == "payment.failed":
+            if po.status == "CAPTURED" or order.order_status == "PAID":
+                processing_status = "ignored_out_of_order"
+            else:
+                err_code = payment_entity.get("error_code")
+                err_desc = payment_entity.get("error_description")
+                po.status = "FAILED"
+                po.updated_at = now
+                order.payment_status = "FAILED"
+                order.updated_at = now
+                _upsert_non_capture_attempt_and_txn(
+                    db,
+                    organisation_id=po.organisation_id,
+                    order=order,
+                    po=po,
+                    provider_payment_id=validated_pid,
+                    target_status="FAILED",
+                    amount_minor=amount_minor,
+                    currency=currency,
+                    method=method,
+                    failure_code=err_code,
+                    failure_reason=err_desc,
+                    metadata={
+                        "provider_event_id": provider_event_id,
+                        "event_type": event_type,
+                    },
+                )
+                db.add(
+                    OrderEvent(
+                        organisation_id=po.organisation_id,
+                        order_id=order.id,
+                        from_status=order.order_status,
+                        to_status=order.order_status,
+                        event_type="payment_failed",
+                        actor_ref="webhook:razorpay",
+                        details={
+                            "provider_event_id": provider_event_id,
+                            "provider_payment_id": validated_pid,
+                            "error_code": err_code,
+                        },
+                    )
+                )
     else:
         processing_status = "processed"
 
