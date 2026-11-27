@@ -5,16 +5,21 @@ import { formatDateTime } from '@/lib/format';
 
 export function EnvironmentBadge() {
   const isProd = config.environment === 'production';
+  const isStaging = config.environment === 'staging';
   return (
     <span
       className={cn(
         'inline-flex h-6 items-center gap-1.5 rounded-sm border px-2 text-2xs font-semibold uppercase',
-        isProd ? 'border-danger/40 bg-danger/10 text-danger' : 'border-warning/40 bg-warning/10 text-warning',
+        isProd
+          ? 'border-danger/40 bg-danger/10 text-danger'
+          : isStaging
+            ? 'border-accent/40 bg-accent/10 text-accent'
+            : 'border-warning/40 bg-warning/10 text-warning',
       )}
       title={`Environment: ${config.environment}`}
     >
-      <span className={cn('h-1.5 w-1.5 rounded-full', isProd ? 'bg-danger' : 'bg-warning')} aria-hidden />
-      {isProd ? 'Production' : 'Development'}
+      <span className={cn('h-1.5 w-1.5 rounded-full', isProd ? 'bg-danger' : isStaging ? 'bg-accent' : 'bg-warning')} aria-hidden />
+      {isProd ? 'Production' : isStaging ? 'Staging' : 'Development'}
     </span>
   );
 }

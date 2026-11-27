@@ -1,0 +1,45 @@
+databases:
+  - name: flashcore-staging-db
+    databaseName: flashcore_staging
+    user: flashcore_staging
+    plan: free
+    region: singapore
+
+services:
+  - type: web
+    name: flashcore-api-staging
+    runtime: python
+    region: singapore
+    plan: starter
+    rootDir: backend
+    branch: feat/stage-4-financial-operations
+    autoDeploy: true
+    buildCommand: pip install -r requirements.txt
+    preDeployCommand: alembic upgrade head
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /ready
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.13.1"
+      - key: APP_ENV
+        value: staging
+      - key: DB_POOL_SIZE
+        value: "5"
+      - key: DB_MAX_OVERFLOW
+        value: "5"
+      - key: DB_POOL_PRE_PING
+        value: "true"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: flashcore-staging-db
+          property: connectionString
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: JWT_ACCESS_TOKEN_MINUTES
+        value: "30"
+      - key: FLASHCORE_CREDENTIAL_ENCRYPTION_KEY
+        sync: false
+      - key: FRONTEND_ORIGIN
+        sync: false
+      - key: FRONTEND_ORIGIN_REGEX
+        sync: false

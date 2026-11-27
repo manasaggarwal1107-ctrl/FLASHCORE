@@ -65,6 +65,9 @@ export function SystemHealthPage() {
                 columns={2}
                 items={[
                   { label: 'Application version', value: health.data.version },
+                  { label: 'Environment', value: health.data.environment },
+                  { label: 'Commit SHA', value: health.data.commitSha, mono: true },
+                  { label: 'Alembic revision', value: health.data.alembicRevision, mono: true },
                   { label: 'Database', value: health.data.database },
                   { label: 'Checked at', value: formatDateTime(health.data.checkedAt) },
                 ]}

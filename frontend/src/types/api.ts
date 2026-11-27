@@ -219,6 +219,9 @@ export interface ServiceStatus {
 export interface SystemHealth {
   status: string | null;
   version: string | null;
+  environment?: string | null;
+  commitSha?: string | null;
+  alembicRevision?: string | null;
   database: string | null;
   services: ServiceStatus[] | null;
   checkedAt: IsoTimestamp | null;

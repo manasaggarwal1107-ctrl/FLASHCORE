@@ -3,10 +3,12 @@ function parsePositiveInt(raw: string | undefined, fallback: number): number {
   return Number.isInteger(n) && n > 0 ? n : fallback;
 }
 
-export type AppEnvironment = 'development' | 'production';
+export type AppEnvironment = 'development' | 'staging' | 'production';
 
 function parseEnvironment(raw: string | undefined): AppEnvironment {
-  return raw === 'production' ? 'production' : 'development';
+  if (raw === 'production') return 'production';
+  if (raw === 'staging') return 'staging';
+  return 'development';
 }
 
 /** Single source of truth for build-time configuration. */

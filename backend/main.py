@@ -32,17 +32,19 @@ app = FastAPI(
 )
 
 # Restrict browser access to explicitly approved frontend origins.
-# Locally defaults to Vite; production origins are supplied by the environment.
+# Locally defaults to Vite; staging/production origins are supplied by the environment.
 frontend_origins = os.getenv("FRONTEND_ORIGIN", "http://localhost:5173")
 allowed_origins = [
     origin.strip().rstrip("/")
     for origin in frontend_origins.split(",")
     if origin.strip()
 ]
+allowed_origin_regex = os.getenv("FRONTEND_ORIGIN_REGEX", "").strip() or None
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
+    allow_origin_regex=allowed_origin_regex,
     allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=[
@@ -53,6 +55,33 @@ app.add_middleware(
         "X-Organisation-Id",
     ],
 )
+
+EXPECTED_ALEMBIC_REVISION = "0004_financial_operations"
+
+
+def _runtime_environment() -> str:
+    for key in ("APP_ENV", "ENVIRONMENT", "FLASHCORE_ENV"):
+        value = os.getenv(key, "").strip()
+        if value:
+            return value
+    return "development"
+
+
+def _commit_sha() -> str:
+    for key in ("RENDER_GIT_COMMIT", "GIT_COMMIT_SHA", "VERCEL_GIT_COMMIT_SHA"):
+        value = os.getenv(key, "").strip()
+        if value:
+            return value[:12]
+    return "unknown"
+
+
+def _read_alembic_revision(connection) -> str | None:
+    try:
+        return connection.execute(
+            text("SELECT version_num FROM alembic_version LIMIT 1")
+        ).scalar_one_or_none()
+    except Exception:
+        return None
 
 app.include_router(auth_router)
 app.include_router(organisations_router)
@@ -98,9 +127,56 @@ def database_health():
     }
 
 
+@app.get("/ready")
+def readiness():
+    db_status = "connected"
+    revision: str | None = None
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1")).scalar_one()
+            revision = _read_alembic_revision(connection)
+    except Exception:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "not_ready",
+                "environment": _runtime_environment(),
+                "commit_sha": _commit_sha(),
+                "database": "unavailable",
+                "migrations": "unknown",
+                "alembic_revision": None,
+                "expected_revision": EXPECTED_ALEMBIC_REVISION,
+                "checked_at": datetime.now(timezone.utc).isoformat(),
+            },
+        )
+
+    if revision is None:
+        migrations_status = "missing"
+    elif revision == EXPECTED_ALEMBIC_REVISION:
+        migrations_status = "ready"
+    else:
+        migrations_status = "outdated"
+
+    ready = db_status == "connected" and migrations_status == "ready"
+    payload = {
+        "status": "ready" if ready else "not_ready",
+        "environment": _runtime_environment(),
+        "commit_sha": _commit_sha(),
+        "database": db_status,
+        "migrations": migrations_status,
+        "alembic_revision": revision,
+        "expected_revision": EXPECTED_ALEMBIC_REVISION,
+        "checked_at": datetime.now(timezone.utc).isoformat(),
+    }
+    if not ready:
+        return JSONResponse(status_code=503, content=payload)
+    return payload
+
+
 @app.get("/api/health")
 def api_system_health():
     db_status = "connected"
+    revision: str | None = None
     services = [
         {
             "name": "FastAPI Application",
@@ -111,6 +187,7 @@ def api_system_health():
     try:
         with engine.connect() as connection:
             connection.execute(text("SELECT 1")).scalar_one()
+            revision = _read_alembic_revision(connection)
             services.append({
                 "name": "PostgreSQL Database",
                 "status": "healthy",
@@ -127,6 +204,9 @@ def api_system_health():
     return {
         "status": "healthy" if db_status == "connected" else "degraded",
         "version": "1.0.0",
+        "environment": _runtime_environment(),
+        "commit_sha": _commit_sha(),
+        "alembic_revision": revision,
         "database": "PostgreSQL" if db_status == "connected" else "Unavailable",
         "services": services,
         "checked_at": datetime.now(timezone.utc).isoformat(),
