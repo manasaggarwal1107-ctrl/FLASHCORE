@@ -92,6 +92,34 @@ export const router = createBrowserRouter([
         ),
       },
       {
+        path: 'refunds',
+        element: page(
+          () => import('@/features/finance/RefundsPage'),
+          'RefundsPage',
+        ),
+      },
+      {
+        path: 'payment-links',
+        element: page(
+          () => import('@/features/finance/PaymentLinksPage'),
+          'PaymentLinksPage',
+        ),
+      },
+      {
+        path: 'settlements',
+        element: page(
+          () => import('@/features/finance/SettlementsPage'),
+          'SettlementsPage',
+        ),
+      },
+      {
+        path: 'reconciliation',
+        element: page(
+          () => import('@/features/finance/ReconciliationPage'),
+          'ReconciliationPage',
+        ),
+      },
+      {
         path: 'products',
         element: page(
           () => import('@/features/products/ProductsPage'),

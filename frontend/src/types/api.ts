@@ -530,3 +530,228 @@ export interface PaymentTransaction {
   source: string;
   createdAt: IsoTimestamp;
 }
+
+export interface RefundPolicy {
+  organisationId: number;
+  refundApprovalThresholdMinor: number;
+  refundApprovalThreshold: DecimalString;
+  currency: string;
+  updatedAt: IsoTimestamp;
+}
+
+export interface RefundApprovalRequest {
+  id: string;
+  refundId: string;
+  orderId: string;
+  paymentTransactionId: string;
+  amountMinor: number;
+  amount: DecimalString;
+  currency: string;
+  thresholdMinor: number;
+  status: string;
+  requestedByUserId: number;
+  decidedByUserId: number | null;
+  decisionNote: string | null;
+  decidedAt: IsoTimestamp | null;
+  createdAt: IsoTimestamp;
+}
+
+export interface RefundEvent {
+  id: number;
+  fromStatus: string | null;
+  toStatus: string;
+  eventType: string;
+  source: string;
+  actorRef: string | null;
+  details: Record<string, unknown> | null;
+  createdAt: IsoTimestamp;
+}
+
+export interface PaymentRefund {
+  id: string;
+  organisationId: number;
+  orderId: string;
+  paymentOrderId: string;
+  paymentTransactionId: string;
+  provider: string;
+  providerPaymentId: string;
+  providerRefundId: string | null;
+  amountMinor: number;
+  amount: DecimalString;
+  currency: string;
+  refundType: string;
+  status: string;
+  reason: string | null;
+  providerStatus: string | null;
+  failureCode: string | null;
+  failureReason: string | null;
+  requiresApproval: boolean;
+  approvalRequest: RefundApprovalRequest | null;
+  events: RefundEvent[] | null;
+  submittedAt: IsoTimestamp | null;
+  processedAt: IsoTimestamp | null;
+  createdAt: IsoTimestamp;
+  updatedAt: IsoTimestamp;
+}
+
+export interface PaymentLink {
+  id: string;
+  organisationId: number;
+  orderId: string;
+  customerId: number | null;
+  provider: string;
+  providerLinkId: string;
+  referenceId: string;
+  amountMinor: number;
+  amount: DecimalString;
+  amountPaidMinor: number;
+  amountPaid: DecimalString;
+  currency: string;
+  acceptPartial: boolean;
+  description: string | null;
+  customerName: string | null;
+  customerEmail: string | null;
+  customerPhone: string | null;
+  shortUrl: string;
+  status: string;
+  expiresAt: IsoTimestamp | null;
+  paidAt: IsoTimestamp | null;
+  cancelledAt: IsoTimestamp | null;
+  createdAt: IsoTimestamp;
+  updatedAt: IsoTimestamp;
+}
+
+export interface PaymentSettlementItem {
+  id: string;
+  entityType: string;
+  providerEntityId: string | null;
+  paymentTransactionId: string | null;
+  refundId: string | null;
+  orderId: string | null;
+  grossAmountMinor: number;
+  grossAmount: DecimalString;
+  feeMinor: number;
+  fee: DecimalString;
+  taxMinor: number;
+  tax: DecimalString;
+  netAmountMinor: number;
+  netAmount: DecimalString;
+  currency: string;
+}
+
+export interface PaymentSettlement {
+  id: string;
+  organisationId: number;
+  provider: string;
+  providerSettlementId: string;
+  status: string;
+  grossAmountMinor: number;
+  grossAmount: DecimalString;
+  refundAmountMinor: number;
+  refundAmount: DecimalString;
+  feeMinor: number;
+  fee: DecimalString;
+  taxMinor: number;
+  tax: DecimalString;
+  adjustmentMinor: number;
+  adjustment: DecimalString;
+  netAmountMinor: number;
+  netAmount: DecimalString;
+  currency: string;
+  settlementUtr: string | null;
+  periodStart: IsoTimestamp | null;
+  periodEnd: IsoTimestamp | null;
+  settledAt: IsoTimestamp | null;
+  source: string;
+  items: PaymentSettlementItem[] | null;
+  createdAt: IsoTimestamp;
+  updatedAt: IsoTimestamp;
+}
+
+export interface SettlementSyncResult {
+  status: 'synced' | 'capability_unavailable';
+  syncedCount: number;
+  message: string;
+}
+
+export interface SettlementImportResult {
+  importId: string;
+  idempotentReplay: boolean;
+  filename: string;
+  fileHash: string;
+  rowCount: number;
+  settlementsCreated: number;
+}
+
+export interface ReconciliationRun {
+  id: string;
+  organisationId: number;
+  runReference: string;
+  provider: string;
+  currency: string;
+  periodStart: IsoTimestamp | null;
+  periodEnd: IsoTimestamp | null;
+  status: string;
+  totalChecked: number;
+  matchedCount: number;
+  exceptionCount: number;
+  summaryJson: Record<string, unknown> | null;
+  createdAt: IsoTimestamp;
+  completedAt: IsoTimestamp | null;
+}
+
+export interface ReconciliationItem {
+  id: string;
+  runId: string;
+  outcome: string;
+  entityType: string;
+  orderId: string | null;
+  paymentTransactionId: string | null;
+  refundId: string | null;
+  settlementId: string | null;
+  providerRef: string | null;
+  expectedAmountMinor: number | null;
+  actualAmountMinor: number | null;
+  expectedCurrency: string | null;
+  actualCurrency: string | null;
+  expectedStatus: string | null;
+  actualStatus: string | null;
+  discrepancyDetails: Record<string, unknown> | null;
+  resolutionStatus: string;
+  resolutionNote: string | null;
+  resolvedByUserId: number | null;
+  resolvedAt: IsoTimestamp | null;
+  createdAt: IsoTimestamp;
+}
+
+export interface FinanceOverview {
+  organisationId: number;
+  currency: string;
+  periodStart: IsoTimestamp | null;
+  periodEnd: IsoTimestamp | null;
+  grossCapturedMinor: number;
+  grossCaptured: DecimalString;
+  successfulPaymentCount: number;
+  failedPaymentCount: number;
+  fullRefundCount: number;
+  partialRefundCount: number;
+  totalRefundedMinor: number;
+  totalRefunded: DecimalString;
+  pendingRefundMinor: number;
+  pendingRefund: DecimalString;
+  pendingRefundCount: number;
+  gatewayFeesMinor: number;
+  gatewayFees: DecimalString;
+  gatewayTaxMinor: number;
+  gatewayTax: DecimalString;
+  grossSettlementsMinor: number;
+  grossSettlements: DecimalString;
+  netSettlementsMinor: number;
+  netSettlements: DecimalString;
+  unsettledCapturedMinor: number;
+  unsettledCaptured: DecimalString;
+  reconciliationExceptionsCount: number;
+  activePaymentLinksCount: number;
+  paidPaymentLinksCount: number;
+  calculationNotes: Record<string, string>;
+}
